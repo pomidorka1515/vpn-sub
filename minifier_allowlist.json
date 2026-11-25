@@ -39,7 +39,7 @@
 	"attr:LinesConfig:_backup_t", "f:LinesConfig:path", "f:LinesConfig:lockfile_path", "f:LinesConfig:size", "f:LinesConfig:max_size_mb", "f:LinesConfig:backup_dir", "f:LinesConfig:backup_interval", "f:LinesConfig:append*", "f:LinesConfig:append_many*", "f:LinesConfig:_append_lines*", "f:LinesConfig:tail*", "f:LinesConfig:read_all", "f:LinesConfig:snapshot", "f:LinesConfig:first*", "f:LinesConfig:count",
 	"f:LinesConfig:clear", "f:LinesConfig:compact*", "f:LinesConfig:backup_now", "f:LinesConfig:close",
 	"f:validate_panel_limit", "v:validate_panel_limit:panels", "v:validate_panel_limit:name", "v:validate_panel_limit:names",
-	"f:_no,nempty_str", "f:check_config_document", "v:check_config_document:profiles", "v:check_config_document:auth", "f:config_etag", "f:apply_config_patch", "f:_is_json_value",
+	"f:_nonempty_str", "f:check_config_document", "v:check_config_document:profiles", "v:check_config_document:auth", "f:config_etag", "f:apply_config_patch", "f:_is_json_value",
 	"c:LiveState", "c:CPUInfo", "c:LoadAverage", "c:RamInfo", "c:SwapInfo", "c:SystemMemory", "c:IPList", "c:ConnCount", "c:AppMemory", "c:GCGenStats", "c:GCStats", "c:ThreadInfo", "c:HealthStatus", "c:FullSystemInfo",
 	"f:_proc_text",
 	"f:trace", "f:font_version", "f:embed_font_faces",
