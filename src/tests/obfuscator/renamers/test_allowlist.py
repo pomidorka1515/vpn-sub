@@ -20,6 +20,172 @@ from tests.support.obfuscator import allowlisted
 __all__: list[str] = []
 
 
+@pytest.mark.parametrize(
+    "entries",
+    [
+        ["f:Record:value"],
+        ["f:Record:value*"],
+        ["a:Record:value:self", "a:Record:value:new_value"],
+    ],
+)
+def test_allowlist_property_accessor_chain(entries: list[str]) -> None:
+    source = """
+class Record:
+    @property
+    def value(self): return -1
+    @value.setter
+    def value(self, new_value): self._stored = new_value
+    @value.getter
+    def value(self): return self._stored
+    @value.deleter
+    def value(self): del self._stored
+class Child(Record): pass
+record = Child()
+record.value = 7
+before = record.value
+del record.value
+__result__ = before, hasattr(record, '_stored')
+"""
+    result, names = allowlisted(source, entries)
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, False)
+    tree = ast.parse(result)
+    accessors = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+    assert len({node.name for node in accessors}) == 1
+    if any(entry.startswith("f:") for entry in entries):
+        assert accessors[0].name == names[entries[0]]
+        assert ".value" not in result
+    if "a:Record:value:self" in names:
+        assert {node.args.args[0].arg for node in accessors} == {names["a:Record:value:self"]}
+    if "a:Record:value:new_value" in names:
+        assert "new_value" not in result
+
+
+@pytest.mark.parametrize("star", ["", "*"])
+def test_allowlist_properties_with_same_name_stay_separate(star: str) -> None:
+    source = """
+class First:
+    @property
+    def value(self): return self._stored
+    @value.setter
+    def value(self, new_value): self._stored = new_value
+class Second:
+    @property
+    def value(self): return self._stored * 2
+    @value.setter
+    def value(self, new_value): self._stored = new_value
+first = First()
+second = Second()
+first.value = 3
+second.value = 4
+__result__ = first.value, second.value
+"""
+    result, names = allowlisted(source, [f"f:First:value{star}"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (3, 8)
+    assert "second.value" in result
+    assert "first.value" not in result
+    assert f"f:First:value{star}" in names
+
+
+def test_allowlist_getter_only_property_parameters() -> None:
+    result, names = allowlisted(
+        "class Record:\n @property\n def value(self): return 7\n__result__=Record().value",
+        ["f:Record:value*"],
+    )
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+    assert set(names) == {"f:Record:value*", "a:Record:value:self"}
+
+
+@pytest.mark.parametrize("access", ["Record.value", "Record.value.fset"])
+def test_allowlist_property_parameters_reject_exposed_descriptor(access: str) -> None:
+    source = f"""
+class Record:
+    @property
+    def value(self): return 7
+    @value.setter
+    def value(self, new_value): pass
+__result__ = {access}
+"""
+    with pytest.raises(ValueError, match="Escaping property"):
+        allowlisted(source, ["f:Record:value*"])
+
+
+def test_allowlist_property_parameters_reject_class_local_descriptor_alias() -> None:
+    source = """
+class Record:
+    @property
+    def value(self): return 7
+    alias = value
+"""
+    with pytest.raises(ValueError, match="Escaping property"):
+        allowlisted(source, ["f:Record:value*"])
+
+
+@pytest.mark.parametrize("entry", ["f:Record:value*", "a:Record:value:self"])
+def test_allowlist_property_parameter_opt_out_preserves_entire_rule(
+    entry: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = """
+from obfuscator import no_rename_arg
+class Record:
+    @property
+    def value(self): return 7
+    @value.setter
+    @no_rename_arg({'self'})
+    def value(self, new_value): pass
+__result__ = Record().value
+"""
+    result, names = allowlisted(source, [entry])
+    assert names == {}
+    assert "overlaps with a no_rename" in capsys.readouterr().err
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+def test_allowlist_properties_survive_release_pipeline() -> None:
+    source = """
+class Record:
+    @property
+    def value(self): return self._stored
+    @value.setter
+    def value(self, new_value): self._stored = new_value
+    @value.deleter
+    def value(self): del self._stored
+record = Record()
+record.value = 7
+before = record.value
+del record.value
+__result__ = before, hasattr(record, '_stored')
+"""
+    result = obfuscate_modules(
+        {Path("main.py"): source}, ["f:Record:value*"], jobs=1
+    )
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, False)
+    assert "f:Record:value*" in result.renames
+    assert ".value" not in result.source
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "def value(self): return 1\n    def value(self): return 2",
+        "@property\n    def value(self): return 1\n    def value(self): return 2",
+        "@property\n    def value(self): return 1\n    @other.setter\n    def value(self, new_value): pass",
+    ],
+)
+def test_allowlist_rejects_non_property_duplicate_definitions(definition: str) -> None:
+    with pytest.raises(ValueError, match="ambiguous"):
+        allowlisted(f"class Record:\n    {definition}\n", ["f:Record:value"])
+
+
 def test_allowlist_nested_bindings_and_keyword_aliases() -> None:
     source = """
 CONSTANT = 3

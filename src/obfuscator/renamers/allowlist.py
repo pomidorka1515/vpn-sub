@@ -5,21 +5,19 @@ import json
 import keyword
 import sys
 from collections import deque
+from collections.abc import Callable
 from contextlib import suppress
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
-from python_minifier.rename.binding import BuiltinBinding
+from python_minifier.rename.binding import BuiltinBinding, NameBinding
 
-from ..analysis import inspects_frames
+from ..analysis import Binding, inspects_frames
 from .attribute_flow import AttributeFlow
 from .attributes import plan_attributes
 from .base import ArgumentRenamer
 from .external import ExternalMembers
-
-if TYPE_CHECKING:
-    from ..analysis import Binding
 
 __all__: list[str] = ["AllowlistRenamer", "read_allowlist"]
 
@@ -84,6 +82,7 @@ class AllowlistRenamer(ArgumentRenamer):
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
         self.classes = [node for node in self.nodes if isinstance(node, ast.ClassDef)]
+        self.bind_properties()
         self.own_members: dict[ast.ClassDef, dict[str, Binding]] = {
             owner: {binding.name: binding for binding in reversed(self.node_bindings(owner))}
             for owner in self.classes
@@ -394,6 +393,82 @@ class AllowlistRenamer(ArgumentRenamer):
             for reference in self.quoted_annotations(child)
         ]
 
+    def bind_properties(self) -> None:
+        """Give class-local property chains their own lexical binding.
+
+        The minifier can attach names read in class bodies to the module binding,
+        combining unrelated properties with the same spelling.
+        """
+        local_names: dict[tuple[ast.ClassDef, str], list[ast.AST]] = {}
+        replaced: set[Binding] = set()
+        for node in self.nodes:
+            if isinstance(node, ast.Name) and isinstance(
+                namespace := node.__dict__.get("namespace"), ast.ClassDef
+            ):
+                local_names.setdefault((namespace, node.id), []).append(node)
+        for owner in self.classes:
+            groups: dict[str, list[ast.AST]] = {}
+            for child in owner.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    groups.setdefault(child.name, []).append(child)
+            for name, functions in groups.items():
+                references = functions + local_names.get((owner, name), [])
+                previous = {node: self.bindings[node] for node in references if node in self.bindings}
+                binding = cast(Callable[[str], Binding], NameBinding)(name)
+                binding.references.extend(references)
+                self.bindings.update((node, binding) for node in references)
+                if not self.property_accessors(binding):
+                    self.bindings.update(previous)
+                    self._definitions.pop(binding, None)
+                    continue
+                for node, old_binding in previous.items():
+                    old_binding.references.remove(node)
+                    self._definitions.pop(old_binding, None)
+                    replaced.add(old_binding)
+                owner.__dict__.setdefault("bindings", []).append(binding)
+        for node in self.nodes:
+            if "bindings" in node.__dict__:
+                node.__dict__["bindings"] = [
+                    binding for binding in self.node_bindings(node)
+                    if binding not in replaced or binding.references
+                ]
+
+    def property_accessors(self, binding: Binding) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+        """Recognize a local builtin property and its same-name accessor chain."""
+        definitions = self.definitions(binding)
+        functions = [
+            node for node in definitions
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        if not functions or len(functions) != len(definitions):
+            return []
+        owner = self.parents.get(functions[0])
+        if not isinstance(owner, ast.ClassDef) or any(
+            self.parents.get(function) is not owner or function not in owner.body
+            for function in functions
+        ):
+            return []
+        functions.sort(key=owner.body.index)
+        for index, function in enumerate(functions):
+            if len(function.decorator_list) != 1:
+                return []
+            decorator = function.decorator_list[0]
+            if index == 0:
+                if not (
+                    isinstance(decorator, ast.Name)
+                    and decorator.id == "property"
+                    and isinstance(cast(object, self.bindings.get(decorator)), BuiltinBinding)
+                ):
+                    return []
+            elif not (
+                isinstance(decorator, ast.Attribute)
+                and decorator.attr in {"getter", "setter", "deleter"}
+                and isinstance(decorator.value, ast.Name)
+                and self.bindings.get(decorator.value) is binding
+            ):
+                return []
+        return functions
+
     def apply(self, entries: list[str]) -> dict[str, str]:
         if not entries:
             return {}
@@ -473,13 +548,29 @@ class AllowlistRenamer(ArgumentRenamer):
                         (actual, qualified_binding, definition)
                     )
         selected: dict[Binding, tuple[str, str, ast.AST]] = {}
-        pending = deque(dict.fromkeys(entries))
+        pending: deque[tuple[str, tuple[str, Binding, ast.AST] | None]] = deque(
+            (entry, None) for entry in dict.fromkeys(entries)
+        )
         queued = set(entries)
         while pending:
-            entry = pending.popleft()
+            entry, specific_target = pending.popleft()
             expand_parameters = entry.startswith("f:") and entry.endswith("*")
             kind, *parts = (entry[:-1] if expand_parameters else entry).split(":")
-            matches = candidates.get(tuple(parts), [])
+            matches = [specific_target] if specific_target is not None else candidates.get(tuple(parts), [])
+            if len(matches) > 1 and kind == "f":
+                bindings = {binding for _, binding, _ in matches}
+                if len(bindings) == 1 and self.property_accessors(matches[0][1]):
+                    matches = matches[:1]
+            if len(matches) > 1 and kind == "a" and all(actual == "a" for actual, _, _ in matches):
+                functions = {self.parents[self.parents[target]] for _, _, target in matches}
+                property_binding = self.bindings.get(next(iter(functions)))
+                if property_binding is not None and functions <= set(self.property_accessors(property_binding)):
+                    protected = [target for target in matches if target[2].__dict__.get("no_rename")]
+                    if protected:
+                        matches = protected[:1]
+                    else:
+                        pending.extend((entry, target) for target in matches[1:])
+                        matches = matches[:1]
             removed_matches = dead_targets.get(tuple(parts), [])
             if removed_matches:
                 if len(matches) + len(removed_matches) != 1:
@@ -516,16 +607,19 @@ class AllowlistRenamer(ArgumentRenamer):
                         )
                 raise ValueError(f"Allowlist {entry!r}: {message}")
             actual, binding, definition = matches[0]
+            accessors = self.property_accessors(binding) if kind == "f" else []
+            protected_definitions: list[ast.AST] = [*accessors] or [definition]
             if kind != actual:
                 raise ValueError(f"Allowlist {entry!r}: incorrect type; target requires {actual!r}")
-            if definition.__dict__.get("no_rename") or (
+            if any(node.__dict__.get("no_rename") for node in protected_definitions) or (
                 expand_parameters
                 and isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and any(
                     argument.__dict__.get("no_rename")
-                    for argument in definition.args.posonlyargs
-                    + definition.args.args
-                    + definition.args.kwonlyargs
+                    for function in accessors or [definition]
+                    for argument in function.args.posonlyargs
+                    + function.args.args
+                    + function.args.kwonlyargs
                 )
             ):
                 print(
@@ -554,21 +648,23 @@ class AllowlistRenamer(ArgumentRenamer):
                         for ref in self.definitions(alias_binding)
                         if ref is not alias_target
                     )
-            if kind in {"c", "f"} and len(definitions) != 1:
+            if kind in {"c", "f"} and len(definitions) != 1 and not accessors:
                 description = "class" if kind == "c" else "function"
                 raise ValueError(f"Allowlist {entry!r}: ambiguous {description} binding")
             if expand_parameters:
                 if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     raise ValueError(f"Allowlist {entry!r}: expected a function or method")
-                expanded_parameters = (
-                    definition.args.posonlyargs + definition.args.args + definition.args.kwonlyargs
-                )
+                expanded_parameters = [
+                    parameter
+                    for function in accessors or [definition]
+                    for parameter in function.args.posonlyargs + function.args.args + function.args.kwonlyargs
+                ]
                 for parameter in expanded_parameters:
                     name = cast(str, parameter.__dict__.get("original_name", parameter.arg))
                     parameter_entry = f"a:{':'.join(parts)}:{name}"
                     if parameter_entry not in queued:
                         queued.add(parameter_entry)
-                        pending.append(parameter_entry)
+                        pending.append((parameter_entry, None))
             if kind == "f" and binding.name.startswith("__") and binding.name.endswith("__"):
                 if not expand_parameters:
                     print(
@@ -608,12 +704,16 @@ class AllowlistRenamer(ArgumentRenamer):
                         f"Allowlist {entry!r}: *args/**kwargs bindings cannot be selected"
                     )
                 function_binding = self.bindings.get(function)
-                if function_binding is None or self.definitions(function_binding) != [function]:
+                property_functions = self.property_accessors(function_binding) if function_binding is not None else []
+                if function_binding is None or (
+                    self.definitions(function_binding) != [function] and function not in property_functions
+                ):
                     raise ValueError(f"Allowlist {entry!r}: ambiguous/reassigned callable")
                 if (
                     function.decorator_list
                     and self.descriptor(function) is None
                     and not self.forwarding_decorators(function)
+                    and function not in property_functions
                 ):
                     raise ValueError(
                         f"Allowlist {entry!r}: parameter belongs to an unknown decorator API"
@@ -650,7 +750,12 @@ class AllowlistRenamer(ArgumentRenamer):
             elif isinstance(node, ast.Attribute):
                 self.used.add(node.attr)
             self.used.update(binding.name for binding in self.node_bindings(node))
-        renamed = {binding: self.fresh_name() for binding in selected}
+        entry_names: dict[str, str] = {}
+        renamed: dict[Binding, str] = {}
+        for binding, (_, entry, _) in selected.items():
+            if entry not in entry_names:
+                entry_names[entry] = self.fresh_name()
+            renamed[binding] = entry_names[entry]
         attributes: dict[ast.Attribute, str] = {}
         keywords: dict[ast.keyword | ast.Constant, str] = {}
         member_names = {
@@ -661,16 +766,22 @@ class AllowlistRenamer(ArgumentRenamer):
         }
         parameter_functions: dict[ast.AST, dict[str, Binding]] = {}
         parameter_methods: set[Binding] = set()
+        property_parameters: set[Binding] = set()
         watched = set(selected)
         for binding, (kind, _, definition) in selected.items():
             if kind == "a":
                 function = self.parents[self.parents[definition]]
-                parameter_functions.setdefault(function, {})[binding.name] = binding
+                function_binding = self.bindings.get(function)
+                if function_binding is not None and function in self.property_accessors(function_binding):
+                    property_parameters.add(function_binding)
+                else:
+                    parameter_functions.setdefault(function, {})[binding.name] = binding
                 if isinstance(self.parents.get(function), ast.ClassDef):
                     member_binding = self.bindings.get(function)
                     if member_binding is not None:
                         watched.add(member_binding)
-                        parameter_methods.add(member_binding)
+                        if member_binding not in property_parameters:
+                            parameter_methods.add(member_binding)
                         member_names.add(member_binding.name)
         constructors = {
             function for function in parameter_functions
@@ -712,6 +823,20 @@ class AllowlistRenamer(ArgumentRenamer):
         for node in self.nodes:
             if id(node) in self.annotation_nodes:
                 continue
+            if isinstance(node, ast.Name) and self.bindings.get(node) in property_parameters:
+                parent = self.parents.get(node)
+                if not (
+                    isinstance(parent, ast.Attribute)
+                    and parent.value is node
+                    and parent.attr in {"getter", "setter", "deleter"}
+                    and isinstance(
+                        decorated := self.parents.get(parent), (ast.FunctionDef, ast.AsyncFunctionDef)
+                    )
+                    and parent in decorated.decorator_list
+                ):
+                    raise ValueError(
+                        f"Escaping property with allowlisted parameters: {ast.unparse(node)!r}"
+                    )
             if isinstance(node, ast.Attribute) and node.attr in member_names:
                 targets = self.attribute_bindings(node)
                 flow_owners: set[ast.ClassDef] | None = None
@@ -741,6 +866,12 @@ class AllowlistRenamer(ArgumentRenamer):
                     for owner in owners:
                         self.check_receiver(owner, node.attr)
                     member_binding = next(iter(affected))
+                    if member_binding in property_parameters and isinstance(
+                        super().target(node.value, instances=False), ast.ClassDef
+                    ):
+                        raise ValueError(
+                            f"Escaping property with allowlisted parameters: {ast.unparse(node)!r}"
+                        )
                     if flow_owners is not None and member_binding in parameter_methods:
                         raise ValueError(
                             f"Unresolved receiver for allowlisted parameters of {self.attribute_flow.describe(node)}"

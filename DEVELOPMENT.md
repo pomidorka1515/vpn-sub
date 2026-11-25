@@ -422,6 +422,16 @@ Methods need their declaring class scope: `_auth_save` has the lexical path
 matching full lexical paths, but do not automatically select them or bypass safety
 checks. Functions with duplicate module-level names, such as `do_backup`, require
 file-qualified selectors to select them individually.
+Builtin properties use the same function selectors: `f:Record:value` renames a
+getter and its same-name `@value.getter`, `@value.setter`, and `@value.deleter`
+chain together, including inherited reads, writes, and deletes. Use
+`f:Record:value*` to also rename regular parameters in every accessor, or
+`a:Record:value:new_value` to select a setter parameter individually. A parameter
+name shared by accessors (such as `self`) is renamed consistently in all of them.
+Parameter selections reject exposed class-level property descriptors, whose
+accessor functions could be called with external keyword arguments. Custom
+property decorators and unrelated duplicate method definitions remain unsupported.
+Properties use `f:` rather than `attr:` selectors.
 Appending `*` to an `f:` entry also selects every regular parameter of that
 function/method: `f:helper*`, `f:SomeMixin:handle*`, or
 `f:SomeMixin:handle:wrapper:inner*`. This renames the function/method name **and**
