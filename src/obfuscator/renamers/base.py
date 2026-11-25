@@ -819,7 +819,12 @@ class ArgumentRenamer:
             return TypeHint(
                 origin="sequence",
                 arguments=(
-                    merge_hints(*(self.value_hint(element, seen) for element in node.elts)),
+                    merge_hints(*(
+                        self.value_hint(element.value, seen).iterated()
+                        if isinstance(element, ast.Starred)
+                        else self.value_hint(element, seen)
+                        for element in node.elts
+                    )),
                 ),
             )
         if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):

@@ -28,6 +28,26 @@ def test_hint_cache_keeps_recursive_and_independent_lookups_separate() -> None:
     assert not analysis.type_targets(expression, {id(expression.value)})
 
 
+def test_unpacked_panel_loop_resolves_actual_session_class() -> None:
+    tree = prepare_tree("""
+class XUiSession: pass
+def build_panels() -> tuple[list[XUiSession], XUiSession | None]:
+    return [], None
+def create_application():
+    panels, whitelist = build_panels()
+    for panel in [*panels, *([whitelist] if whitelist else [])]:
+        panel.log
+""", "fixture.py")
+    analysis = ArgumentRenamer({"__main__": tree})
+    owner = tree.body[0]
+    assert isinstance(owner, ast.ClassDef)
+    receiver = next(
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and node.attr == "log"
+    )
+    assert analysis.type_targets(receiver) == {owner}
+
+
 def test_cross_module_keywords_and_reexports() -> None:
     results = renamed_modules(
         {

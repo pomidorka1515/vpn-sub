@@ -215,3 +215,48 @@ def test_attribute_file_qualifier_disambiguates_classes() -> None:
     namespace: dict[str, Any] = {}
     exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == (1, 2)
+
+
+@pytest.mark.parametrize("iterable", [
+    "[*panels, *([whitelist] if whitelist else [])]",
+    "[*panels, whitelist]",
+    "[*panels, *[whitelist]]",
+    "{*panels, whitelist}",
+])
+def test_unrelated_receivers_in_unpacked_containers(iterable: str) -> None:
+    source = f"""
+class LinesConfig:
+    def __init__(self): self.log = 7
+    def read(self): return self.log
+class Panel:
+    def __init__(self): self.log = 11
+def build_panels() -> tuple[list[Panel], Panel | None]:
+    return [Panel()], Panel()
+def run():
+    panels, whitelist = build_panels()
+    result = 0
+    for panel in {iterable}:
+        result += panel.log
+        result += getattr(panel, 'log')
+    return result
+__result__ = run(), LinesConfig().read()
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:LinesConfig:log"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (44, 7)
+
+
+@pytest.mark.parametrize("annotation", ["", ": list[LinesConfig | Panel]"])
+def test_unpacked_unknown_or_polymorphic_receiver_fails_closed(annotation: str) -> None:
+    source = f"""
+class LinesConfig:
+    log = 7
+class Panel:
+    log = 11
+def read(panels{annotation}):
+    for panel in [*panels]:
+        panel.log
+"""
+    with pytest.raises(ValueError, match=r"Unresolved receiver|Ambiguous polymorphic"):
+        obfuscate_modules({Path("main.py"): source}, ["attr:LinesConfig:log"], jobs=1)
