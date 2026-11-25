@@ -17,6 +17,8 @@ from regexes import BROWSER_UA
 if TYPE_CHECKING:
     from quart import Response
 
+    from config import AppConfig
+    from config.store import AsyncConfig
     from custom_types import JsonifyValue
 
 __all__ = [
@@ -141,7 +143,7 @@ def _response(success: bool, msg: str | None, code: int, obj: JsonifyValue) -> t
     from quart import current_app, jsonify
 
     body: dict[str, JsonifyValue] = {"success": success, "msg": msg, "obj": obj}
-    cfg = current_app.extensions.get("response_config")
+    cfg: AsyncConfig[AppConfig] | None = current_app.extensions.get("response_config")
     if cfg is not None:
         strings = cfg.view().get("funny_strings")
         if strings:
