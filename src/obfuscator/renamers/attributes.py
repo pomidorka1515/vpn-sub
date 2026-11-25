@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 from python_minifier.rename.binding import BuiltinBinding
 
 from ..analysis import inspects_frames
+from ..debug import record_attribute
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -143,4 +144,5 @@ def plan_attributes(
                 raise ValueError(f"Allowlist {entry!r}: conflicting attribute selections")
             changes[reference] = replacement
         report[entry] = replacement
+        record_attribute(owner, name, replacement)
     return changes, bindings, report

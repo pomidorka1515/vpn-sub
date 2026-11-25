@@ -19,6 +19,7 @@ from .annotations import AnnotationIndex
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
 from .dataclasses import minify_dataclasses
+from .debug import annotate_debug
 from .linker import flatten, module_name
 from .markers import strip_markers
 from .mixins import fold_mixins, mark_mixin_origins
@@ -59,6 +60,7 @@ def obfuscate_modules(
     *,
     jobs: int | None = None,
     progress: Callable[[str], None] | None = None,
+    debug: bool = False,
 ) -> ObfuscationResult:
     """Prepare, link, rename, and minify a set of relative application sources."""
     if not originals:
@@ -74,7 +76,7 @@ def obfuscate_modules(
         if workers > 1
         else nullcontext(None)
     ) as executor:
-        return _obfuscate_modules(originals, entries, executor, progress)
+        return _obfuscate_modules(originals, entries, executor, progress, debug=debug)
 
 
 type ProtocolKey = tuple[str, str]
@@ -118,6 +120,8 @@ def _obfuscate_modules(
     entries: list[str],
     executor: ProcessPoolExecutor | None,
     progress: Callable[[str], None] | None,
+    *,
+    debug: bool = False,
 ) -> ObfuscationResult:
     def announce(stage: str) -> None:
         if progress is not None:
@@ -193,7 +197,13 @@ def _obfuscate_modules(
     consolidate_aliases(linked)
     shorten_imports(linked)
     return ObfuscationResult(
-        source=minify_tree(linked, "app.min.py", rename_globals=True, executor=executor),
+        source=minify_tree(
+            linked,
+            "app.min.py",
+            rename_globals=True,
+            executor=executor,
+            debug_entries=entries if debug else None,
+        ),
         renames=renames,
         renamed_parameters=renamed_parameters,
         skipped_parameters=skipped_parameters,
@@ -246,6 +256,7 @@ def minify_tree(
     rename_globals: bool = False,
     rename_locals: bool = True,
     executor: ProcessPoolExecutor | None = None,
+    debug_entries: list[str] | None = None,
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
     minify_sql_literals(tree, executor=executor)
@@ -293,7 +304,10 @@ def minify_tree(
         remove_builtin_exception_brackets=False,
     )
     compile(result, filename, "exec")
-    return result + "\n"
+    result += "\n"
+    if debug_entries is not None:
+        result = annotate_debug(result, tree, debug_entries, filename)
+    return result
 
 
 def obfuscate(source: str, filename: str) -> str:

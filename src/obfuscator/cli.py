@@ -26,6 +26,12 @@ def main() -> None:
     )
     parser.add_argument("--report", action="store_true", help="Show allowlisted identifier renames")
     parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="Add original class, function, argument, and attribute names as comments",
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=default_jobs(),
@@ -69,7 +75,11 @@ def main() -> None:
 
     try:
         result = obfuscate_modules(
-            originals, read_allowlist(args.allowlist), jobs=args.jobs, progress=report_progress
+            originals,
+            read_allowlist(args.allowlist),
+            jobs=args.jobs,
+            progress=report_progress,
+            debug=args.debug,
         )
     except ValueError as error:
         parser.error(str(error))

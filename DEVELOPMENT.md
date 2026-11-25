@@ -317,6 +317,10 @@ bounds a stuck stop.
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
 `app.min.py` in an existing output directory; unrelated files are left intact.
+Use `-d` / `--debug` to add a timestamp, the allowlist used, and original-name
+comments for renamed classes, functions (including methods), arguments, and
+class-scoped attributes. Variable names are omitted. Debug output adds only
+comments to the normal minified output; executable text is unchanged.
 The build also requires `sqlglot==30.34.0` (included in the dev dependencies).
 Complete, parser-supported SQLite statements in string literals are minified:
 comments and optional whitespace are removed, while quoted contents, bind

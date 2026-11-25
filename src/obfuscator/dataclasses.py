@@ -5,6 +5,7 @@ from typing import cast
 
 from .analysis import inspects_frames
 from .annotations import TypeHint
+from .debug import record_attribute
 from .renamers.base import ArgumentRenamer
 
 __all__: list[str] = ["minify_dataclasses"]
@@ -317,6 +318,7 @@ class _Dataclasses(ArgumentRenamer):
                 continue
             for name, statement in members.items():
                 new = self.fresh_name()
+                record_attribute(owner, name, new)
                 binding = self.bindings.get(statement.target)
                 if binding is not None:
                     binding.rename(new)
