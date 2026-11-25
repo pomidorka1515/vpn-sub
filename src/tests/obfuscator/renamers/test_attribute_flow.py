@@ -63,6 +63,127 @@ def test_closed_receiver_and_callback_flows(usage: str) -> None:
     assert execute(RECORD + usage)["__result__"] == 7
 
 
+@pytest.mark.parametrize("wrap", [False, True])
+@pytest.mark.parametrize("loop", [False, True])
+@pytest.mark.parametrize("linked", [False, True])
+def test_conditional_callback_wrapper_and_descriptor_binding(wrap: bool, loop: bool, linked: bool) -> None:
+    source = f"""
+from __future__ import annotations
+from collections.abc import Callable
+from functools import wraps
+from typing import Concatenate
+__all__: list[str] = []
+class Record:
+    def __init__(self) -> None: self._value: int = 7
+    def read(self) -> int: return self._value
+record: Record = Record()
+type Method[**P, R] = Callable[Concatenate[Record, P], R]
+def decorate[**P, R](count: int) -> Callable[[Method[P, R]], Method[P, R]]:
+    def decorator(function: Method[P, R]) -> Method[P, R]:
+        @wraps(function)
+        def wrapper(self: Record, *args: P.args, **kwargs: P.kwargs) -> R:
+            return function(self, *args, **kwargs)
+        return wrapper
+    return decorator
+def register(record: Record) -> int:
+    {'for name in ("read",):' if loop else 'if True:'}
+        try:
+            function: Method[[], int] = getattr(type(record), 'read')
+        except AttributeError:
+            return 0
+        if {wrap}:
+            function = decorate(10)(function)
+        function = function.__get__(record, type(record))
+        return function()
+    return 0
+__result__: int = register(record)
+"""
+    if linked:
+        result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+        namespace: dict[str, Any] = {}
+        exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    else:
+        namespace = execute(source)
+    assert namespace["__result__"] == 7
+
+
+def test_conditional_callback_retains_opaque_alternative() -> None:
+    source = RECORD + """
+from functools import wraps
+def decorate(function):
+    @wraps(function)
+    def wrapper(self: Record, *args, **kwargs):
+        return function(self, *args, **kwargs)
+    return wrapper
+def register(record: Record):
+    function = external
+    if flag:
+        function = decorate(function)
+    function = function.__get__(record, type(record))
+    return function()
+register(record)
+"""
+    with pytest.raises(ValueError, match=r"Escaping|Unresolved|Ambiguous"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_exception_handler_callback_alternative_is_not_discarded() -> None:
+    source = RECORD + """
+def read(item: Record) -> int: return item._value
+def invoke(item: Record) -> int:
+    try:
+        callback = read
+    except Exception:
+        callback = external
+    return callback(item)
+invoke(record)
+"""
+    with pytest.raises(ValueError, match="unresolved consumer"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_wraps_does_not_hide_an_escape_in_the_wrapper_body() -> None:
+    source = RECORD + """
+from functools import wraps
+def read(item: Record) -> int: return item._value
+@wraps(read)
+def wrapper(item: Record) -> int:
+    external(item)
+    return read(item)
+wrapper(record)
+"""
+    with pytest.raises(ValueError, match="unresolved consumer"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+@pytest.mark.parametrize("view", ["keys", "values"])
+@pytest.mark.parametrize("comprehension", [False, True])
+def test_mapping_views_track_selected_receivers(view: str, comprehension: bool) -> None:
+    key, value = ("record", "1") if view == "keys" else ("'key'", "record")
+    iterable = f"[element for element in cache.{view}()]" if comprehension else f"cache.{view}()"
+    source = RECORD + f"""
+cache = {{}}
+cache[{key}] = {value}
+for item in {iterable}:
+    __result__ = item._value
+"""
+    assert execute(source)["__result__"] == 7
+
+
+@pytest.mark.parametrize("view", ["keys", "values"])
+@pytest.mark.parametrize("comprehension", [False, True])
+def test_mapping_views_do_not_hide_escaping_receivers(view: str, comprehension: bool) -> None:
+    key, value = ("record", "1") if view == "keys" else ("'key'", "record")
+    iterable = f"[element for element in cache.{view}()]" if comprehension else f"cache.{view}()"
+    source = RECORD + f"""
+cache = {{}}
+cache[{key}] = {value}
+external({iterable})
+"""
+    with pytest.raises(ValueError, match="Escaping"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
 @pytest.mark.parametrize("usage", [
     "def invoke(callback, tx): return callback(tx)\ninvoke(external, record)",
     ("def read(item): return item._value\ndef invoke(callback, tx): return callback(tx)\n"
@@ -352,7 +473,8 @@ class Other:
 def run():
     item = Other()
     for flag in [True]:
-        item = record
+        if flag:
+            item = record
         print(item._value)
 run()
 """

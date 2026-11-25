@@ -4,7 +4,7 @@
 	"f:parse_level", "v:parse_level:text", "f:env_level",
 	"c:Logger:_make_formatter:Fmt",
 	"f:program_dir", "f:compiled", "f:bundled_root", "f:frontend_root", "f:runtime_dir",
-	"f:fmt_timestamp", "f:sanitize", "f:generate_token", "f:isbrowser", "f:compare", "f:isuuid", "f:isusername", "f:ok*", "f:err", "f:_response", "f:format", "f:parse_bool", "f:_section",
+	"f:fmt_timestamp", "f:sanitize", "f:generate_token", "f:isbrowser", "f:compare", "f:isuuid", "f:isusername", "f:ok*", "f:err", "f:_response", "f:format", "f:parse_bool", "f:api/common.py:_section",
 	"f:fmt_bytes", "f:fmt_time", "f:format_usage", "f:truncate_utf8", "f:make_qr*",
 	"f:rate_limit", "f:rate_limit:decorator", "f:rate_limit:decorator:wrapper",
 	"f:asset_version", "f:resolve_web_lang", "f:web_lang_tables",
@@ -58,6 +58,5 @@
 	"f:db/backup.py:instance_backup_dir", "f:db/backup.py:prune_backups", "f:db/backup.py:do_backup",
 	"f:config/backup.py:instance_backup_dir", "f:config/backup.py:prune_backups", "f:config/backup.py:do_backup",
 	"attr:Logger:_instances", "attr:Logger:_shared_handlers", "attr:Logger:_registry_lock", "f:Logger:_make_formatter",
-	"f:Connection:execute*", "f:Connection:_execute*", "f:Connection:executemany*", "f:Connection:_executemany*", "f:Connection:rows*", "f:Connection:_rows*", "f:Connection:row*", "f:Connection:_row*",
-	"f:make_backup_thread:log_faliure", "f:make_backup:loop"
+	"f:Connection:execute*", "f:Connection:_execute*", "f:Connection:executemany*", "f:Connection:_executemany*", "f:Connection:rows*", "f:Connection:_rows*", "f:Connection:row*", "f:Connection:_row*"
 ]

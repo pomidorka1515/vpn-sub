@@ -79,6 +79,7 @@ class AttributeFlow:
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
         self.container_items: dict[ast.expr, Value] = {}
         self.container_values: dict[ast.expr, Value] = {}
+        self.mapping_views: set[ast.Call] = set()
         self.zipped: dict[ast.Call, ast.Tuple] = {}
         self.sequence_sources: dict[ast.Tuple, tuple[ast.expr | None, ...]] = {}
         self.keyword_sources: dict[ast.Dict, tuple[tuple[str | None, ast.expr], ...]] = {}
@@ -102,7 +103,7 @@ class AttributeFlow:
                     self.sequence_sources[pair] = tuple(node.args) if getattr(binding, "name", "") == "zip" else (None, *node.args[:1])
                     self.container_items[node] = Value(containers=frozenset({pair}))
                     self.container_items[pair] = _BOTTOM
-            if isinstance(node, (ast.List, ast.Tuple, ast.Set)) and not isinstance(getattr(node, "ctx", None), ast.Store):
+            if isinstance(node, (ast.List, ast.Tuple, ast.Set, ast.ListComp, ast.SetComp, ast.GeneratorExp)) and not isinstance(getattr(node, "ctx", None), ast.Store):
                 self.container_items[node] = _BOTTOM
             elif isinstance(node, ast.Dict):
                 self.container_items[node] = _BOTTOM
@@ -359,33 +360,65 @@ class AttributeFlow:
         if len(definitions) < 2 or not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return definitions
 
-        def statement(part: ast.AST) -> ast.AST | None:
-            while (parent := self.analysis.parents.get(part)) is not scope:
-                if parent is None or isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-                    return None
-                part = parent
-            return part
-
-        location = statement(node)
-        if location not in scope.body or not isinstance(location, (ast.Assign, ast.AnnAssign, ast.Expr, ast.Return, ast.Raise)):
-            return definitions
-        position = scope.body.index(cast(ast.stmt, location))
-        candidates: list[tuple[int, ast.AST]] = []
-        last_definite = -1
-        for definition in definitions:
-            assignment = self.analysis.parents.get(definition)
-            origin = statement(definition)
-            if isinstance(definition, ast.arg):
-                candidates.append((-1, definition))
-            elif isinstance(origin, ast.stmt) and origin in scope.body:
-                index = scope.body.index(origin)
-                if index < position:
-                    candidates.append((index, definition))
-                    if assignment is origin and isinstance(assignment, (ast.Assign, ast.AnnAssign)):
-                        last_definite = max(last_definite, index)
-            else:
+        ancestors: set[ast.AST] = set()
+        part: ast.AST = node
+        while part is not scope:
+            ancestors.add(part)
+            parent = self.analysis.parents.get(part)
+            if parent is None:
                 return definitions
-        resolved = [definition for index, definition in candidates if index >= last_definite]
+            part = parent
+        stores: dict[ast.AST, list[ast.AST]] = {}
+        for definition in definitions:
+            if not isinstance(definition, (ast.arg, ast.Name)) or self.enclosing_function(definition) is not scope:
+                return definitions
+            if isinstance(definition, ast.Name):
+                stores.setdefault(self.analysis.parents[definition], []).append(definition)
+
+        def suite(body: list[ast.stmt], incoming: set[ast.AST]) -> set[ast.AST]:
+            reaching = incoming
+            for statement in body:
+                if statement in ancestors:
+                    # RHS reads precede the assignment, including augmented
+                    # assignments. Descend into the current branch rather than
+                    # mixing in later stores or the other branch's values.
+                    if isinstance(statement, ast.If):
+                        for branch in (statement.body, statement.orelse):
+                            if any(child in ancestors for child in branch):
+                                return suite(branch, reaching)
+                    elif isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+                        for branch in (statement.body, statement.orelse):
+                            if any(child in ancestors for child in branch):
+                                return suite(branch, set(definitions))
+                    elif isinstance(statement, (ast.Try, ast.TryStar)):
+                        if any(child in ancestors for child in statement.body):
+                            return suite(statement.body, reaching)
+                        return set(definitions)
+                    elif not isinstance(statement, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr, ast.Return, ast.Raise)):
+                        return set(definitions)
+                    return reaching
+                if isinstance(statement, (ast.Assign, ast.AnnAssign)) and statement in stores:
+                    reaching = set(stores[statement])
+                elif isinstance(statement, ast.If):
+                    reaching = suite(statement.body, reaching) | suite(statement.orelse, reaching)
+                elif isinstance(statement, (ast.Try, ast.TryStar)):
+                    completed = suite(statement.orelse, suite(statement.body, reaching))
+                    partial = reaching | {
+                        definition for child in statement.body for part in ast.walk(child)
+                        for definition in stores.get(part, ())
+                    }
+                    for handler in statement.handlers:
+                        completed |= suite(handler.body, partial)
+                    reaching = suite(statement.finalbody, completed)
+                elif isinstance(statement, (ast.Return, ast.Raise)):
+                    return set()
+                elif any(part in stores for part in ast.walk(statement)):
+                    # Unsupported control flow keeps every alternative. A later
+                    # definite local assignment can still close the binding.
+                    reaching = set(definitions)
+            return reaching
+
+        resolved = list(suite(scope.body, {definition for definition in definitions if isinstance(definition, ast.arg)}))
         self.reaching[node] = resolved or definitions
         return self.reaching[node]
 
@@ -426,6 +459,9 @@ class AttributeFlow:
             return _BOTTOM
         seen |= {node}
         analysis = self.analysis
+        if isinstance(node, ast.Call) and node in self.mapping_views and isinstance(node.func, ast.Attribute):
+            receiver = self.value(node.func.value, seen)
+            return Value(containers=frozenset({node}), unknown=receiver.unknown or bool(receiver.owners or receiver.functions))
         if isinstance(node, (ast.Name, ast.Attribute)):
             imported = analysis.imported_path(node)
             if imported in self.external_containers:
@@ -453,7 +489,7 @@ class AttributeFlow:
                     parent = analysis.parents.get(definition)
                     if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
                         values.append(self.value(parent.value, seen))
-                    elif isinstance(parent, ast.For) and parent.target is definition:
+                    elif isinstance(parent, (ast.For, ast.comprehension)) and parent.target is definition:
                         iterable = self.value(parent.iter, seen)
                         if iterable.containers:
                             values.append(self.join([self.container_items[item] for item in iterable.containers]).merge(
@@ -468,7 +504,7 @@ class AttributeFlow:
                             statement = analysis.parents.get(target)
                             if isinstance(statement, (ast.Assign, ast.AnnAssign)) and statement.value is not None:
                                 unpacked = self.value(statement.value, seen)
-                            elif isinstance(statement, ast.For):
+                            elif isinstance(statement, (ast.For, ast.comprehension)):
                                 unpacked = self.iterated_value(self.value(statement.iter, seen))
                             else:
                                 unpacked = _UNKNOWN
@@ -548,6 +584,10 @@ class AttributeFlow:
             if bound_function is not None:
                 return bound_function
             if node in self.container_items:
+                return Value(containers=frozenset({node}))
+            if self.mapping_view(node, seen):
+                self.container_items.setdefault(node, _BOTTOM)
+                self.mapping_views.add(node)
                 return Value(containers=frozenset({node}))
             if isinstance(node.func, ast.Attribute) and node.func.attr == "pop" and not node.args and not node.keywords:
                 receiver = self.value(node.func.value, seen)
@@ -734,10 +774,18 @@ class AttributeFlow:
             or self.analysis.descriptor(function) is not None
             or bool(self.analysis.forwarding_decorators(function))
             or all(
-                isinstance(decorator := self.static_target(expression), ast.FunctionDef)
-                and self.local_forwarder(decorator) for expression in function.decorator_list
+                (isinstance(expression, ast.Call) and self.wraps_call(expression))
+                or (isinstance(decorator := self.static_target(expression), ast.FunctionDef)
+                    and self.local_forwarder(decorator)) for expression in function.decorator_list
             )
         )
+
+    def wraps_call(self, call: ast.Call) -> bool:
+        """functools.wraps copies metadata; it does not dispatch its argument."""
+        if self.analysis.imported_path(call.func) != "functools.wraps" or len(call.args) != 1 or call.keywords:
+            return False
+        wrapped = self.value(call.args[0])
+        return not wrapped.owners and not wrapped.containers
 
     def bind_arguments(self, call: ast.Call, target: CallableValue) -> dict[ast.arg, ast.expr] | None:
         """Bind visible positional/keyword arguments exactly, or reject expansion."""
@@ -883,7 +931,7 @@ class AttributeFlow:
         # the same sequence of argument/field updates as a full tree scan.
         nodes = [
             node for node in self.nodes
-            if isinstance(node, (ast.Call, ast.Tuple, ast.List, ast.Set, ast.Dict))
+            if isinstance(node, (ast.Call, ast.Tuple, ast.List, ast.Set, ast.Dict, ast.ListComp, ast.SetComp, ast.GeneratorExp))
             or (isinstance(node, ast.Assign) and any(not isinstance(target, ast.Name) for target in node.targets))
             or (isinstance(node, ast.AnnAssign) and node.value is not None and not isinstance(node.target, ast.Name))
         ]
@@ -892,6 +940,18 @@ class AttributeFlow:
             self.values.clear()
             for node in nodes:
                 if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Attribute) and self.mapping_view(node):
+                        self.mapping_views.add(node)
+                        view_receiver = self.value(node.func.value)
+                        items = self.join([
+                            self.container_values[item] if node.func.attr == "values" else self.container_items[item]
+                            for item in view_receiver.containers
+                        ])
+                        previous = self.container_items.get(node, _BOTTOM)
+                        updated = previous.merge(items)
+                        if node not in self.container_items or updated is not previous:
+                            self.container_items[node] = updated
+                            self.changed = True
                     if node in self.zipped:
                         pair = self.zipped[node]
                         previous = self.container_items[pair]
@@ -978,6 +1038,7 @@ class AttributeFlow:
                     if (targets.unknown or not targets.functions) and not (
                         node in self.container_items or self.passive_container_call(node)
                         or self.descriptor_binding(node) is not None
+                        or self.wraps_call(node)
                     ):
                         for expression in [*node.args, *(keyword.value for keyword in node.keywords)]:
                             self.open_callbacks(self.value(expression))
@@ -985,14 +1046,15 @@ class AttributeFlow:
                     destinations = node.targets if isinstance(node, ast.Assign) else [node.target]
                     for destination in destinations:
                         self.store(destination, node.value)
-                elif isinstance(node, (ast.Tuple, ast.List, ast.Set, ast.Dict)):
+                elif isinstance(node, (ast.Tuple, ast.List, ast.Set, ast.Dict, ast.ListComp, ast.SetComp, ast.GeneratorExp)):
                     if node in self.container_items:
                         if isinstance(node, ast.Dict):
                             for key, value in zip(node.keys, node.values, strict=True):
                                 self.add_container_value(node, self.value(key) if key is not None else _UNKNOWN, self.value(value))
                         else:
                             previous = self.container_items[node]
-                            updated = previous.merge(self.join([self.value(element) for element in node.elts]))
+                            elements = [node.elt] if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) else node.elts
+                            updated = previous.merge(self.join([self.value(element) for element in elements]))
                             if updated is not previous:
                                 self.container_items[node] = updated
                                 self.changed = True
@@ -1004,7 +1066,9 @@ class AttributeFlow:
                             self.call_arguments(call, target) is not None for target in self.targets(call).functions
                         ):
                             continue
-                    elements = node.values if isinstance(node, ast.Dict) else node.elts
+                    elements = node.values if isinstance(node, ast.Dict) else (
+                        [node.elt] if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) else node.elts
+                    )
                     for element in elements:
                         self.open_callbacks(self.value(element))
             if not self.changed:
@@ -1105,12 +1169,22 @@ class AttributeFlow:
         if call.func.attr == "clear":
             return not call.args
         if receiver.containers <= self.container_values.keys():
-            return call.func.attr in {"get", "setdefault", "pop"} and len(call.args) in {1, 2}
+            return (call.func.attr in {"get", "setdefault", "pop"} and len(call.args) in {1, 2}) or (
+                call.func.attr in {"keys", "values"} and not call.args and not receiver.unknown
+            )
         if not receiver.containers & self.container_values.keys():
             return (call.func.attr in {"add", "append", "discard", "remove"} and len(call.args) == 1) or (
                 call.func.attr == "pop" and not call.args
             )
         return False
+
+    def mapping_view(self, call: ast.Call, seen: frozenset[ast.AST] = frozenset()) -> bool:
+        if not isinstance(call.func, ast.Attribute) or call.func.attr not in {"keys", "values"} or call.args or call.keywords:
+            return False
+        receiver = self.value(call.func.value, seen)
+        return bool(receiver.containers) and receiver.containers <= self.container_values.keys() and not (
+            receiver.unknown or receiver.owners or receiver.functions
+        )
 
     def passive_container_call(self, call: ast.Call) -> bool:
         if not isinstance(call.func, ast.Attribute):
@@ -1253,7 +1327,7 @@ class AttributeFlow:
         return checked
 
     def verify_call(self, call: ast.Call, family: set[ast.ClassDef]) -> None:
-        if self.descriptor_binding(call) is not None:
+        if self.descriptor_binding(call) is not None or self.wraps_call(call):
             return
         if isinstance(call.func, ast.Attribute):
             receiver = self.value(call.func.value)

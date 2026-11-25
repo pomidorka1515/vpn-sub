@@ -389,7 +389,10 @@ opaque consumers and unsupported operations on registries containing selected
 receivers still fail closed. Empty internal `dict`, `OrderedDict`, and
 `WeakKeyDictionary` caches track keys and values through subscript stores/reads
 and `get`/`setdefault`/`pop`, including nested caches; unknown consumers still
-reject caches containing selected receivers. Logger subclasses may register themselves in the
+reject caches containing selected receivers. Dictionary `keys()`/`values()` views
+retain element flow through iteration and comprehensions; passing such views or
+their receiver-containing copies to opaque consumers still fails closed.
+Logger subclasses may register themselves in the
 standard `logging.Logger.manager.loggerDict`; inherited logging implementations
 are inspected for conflicts with the selected fields as usual.
 Receiver safety follows visible function/lambda calls through positional and keyword
@@ -397,6 +400,10 @@ parameters, literal `**kwargs`, defaults, aliases, bound methods, callback forwa
 returns, and internal instance fields. Failed argument matching on a bound callback
 preserves its captured receiver when decorators are proven to retain the original
 binding; uncertainty still applies to explicit arguments and unverifiable decorators.
+Local callback rebindings follow statement order and conditional branches, including
+successful `try` paths whose error handlers return. Later method binding cannot flow
+back into an earlier wrapper application. Stdlib `functools.wraps` copies callable
+metadata without exposing the callback's argument API or changing its binding.
 Recursive call graphs are solved to a fixed point; every possible callback implementation
 must be visible. Known internal callees
 are checked transitively rather than assumed safe. Opaque callback alternatives,
