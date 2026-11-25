@@ -394,13 +394,20 @@ standard `logging.Logger.manager.loggerDict`; inherited logging implementations
 are inspected for conflicts with the selected fields as usual.
 Receiver safety follows visible function/lambda calls through positional and keyword
 parameters, literal `**kwargs`, defaults, aliases, bound methods, callback forwarding,
-returns, and internal instance fields. Recursive call graphs are solved to a fixed
-point; every possible callback implementation must be visible. Known internal callees
+returns, and internal instance fields. Failed argument matching on a bound callback
+preserves its captured receiver when decorators are proven to retain the original
+binding; uncertainty still applies to explicit arguments and unverifiable decorators.
+Recursive call graphs are solved to a fixed point; every possible callback implementation
+must be visible. Known internal callees
 are checked transitively rather than assumed safe. Opaque callback alternatives,
 escaping callback APIs, dynamic argument expansions, and unsupported container/yield
-or external storage of selected receivers fail closed. Fixed builtin protocol
-operations (such as `dict(tx)` and `len(tx)`) are supported without treating them as
-arbitrary attribute consumers. External return annotations can establish unrelated
+or external storage of selected receivers fail closed. Visible callbacks
+may return selected receivers through opaque external dispatchers; opting into an
+attribute rename accepts external handling of those results. This does not establish
+the external result's receiver type. Direct receiver arguments, bound callbacks on
+selected receivers, and escapes inside visible callback bodies remain checked.
+Fixed builtin protocol operations (such as `dict(tx)` and `len(tx)`) are supported
+without treating them as arbitrary attribute consumers. External return annotations can establish unrelated
 receivers through imported constructors/functions, method calls, assignments, and
 sync/async context managers. Async function results and annotated awaitables are
 unwrapped at `await`; generic context-manager parameters and `Self` are retained.

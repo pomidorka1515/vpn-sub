@@ -4,8 +4,8 @@
 	"f:parse_level", "v:parse_level:text", "f:env_level",
 	"c:Logger:_make_formatter:Fmt",
 	"f:program_dir", "f:compiled", "f:bundled_root", "f:frontend_root", "f:runtime_dir",
-	"f:fmt_timestamp", "f:sanitize", "f:generate_token", "f:isbrowser", "f:compare", "f:isuuid", "f:isusername", "f:ok", "f:err", "f:_response", "f:format", "f:parse_bool",
-	"f:fmt_bytes", "f:fmt_time", "f:format_usage", "f:truncate_utf8", "f:make_qr",
+	"f:fmt_timestamp", "f:sanitize", "f:generate_token", "f:isbrowser", "f:compare", "f:isuuid", "f:isusername", "f:ok*", "f:err", "f:_response", "f:format", "f:parse_bool", "f:_section",
+	"f:fmt_bytes", "f:fmt_time", "f:format_usage", "f:truncate_utf8", "f:make_qr*",
 	"f:rate_limit", "f:rate_limit:decorator", "f:rate_limit:decorator:wrapper",
 	"f:asset_version", "f:resolve_web_lang", "f:web_lang_tables",
 	"f:credential_digest", "f:_scoped_signature", "f:new_scoped_session", "f:valid_scoped_cookie",
@@ -31,11 +31,15 @@
 	"attr:Config:_sync_mode", "attr:Config:_isolate_commits", "attr:Config:data", "attr:Config:last_signature", "attr:Config:_shared_snapshot", "attr:Config:_shared_signature", "attr:Config:lock", "attr:Config:active_transaction",
 	"attr:Config:context_transaction", "attr:Config:schema_cache_path", "attr:Config:schema_cache_signature", "attr:Config:schema_cache", "attr:Config:schema_validator", "attr:Config:_warned_update_callable", "attr:Config:_read_only", "attr:Config:_read_only_jsonc",
 	"attr:Config:_backup_dir", "attr:Config:_backup_interval", "attr:Config:_backup_retention", "attr:Config:_backup_stop", "attr:Config:_backup_t", "f:Config:write_backup*", "f:Config:raise_if_read_only", "f:Config:reload", "f:Config:edit", "f:Config:mutate*",
+	"f:Config:path", "f:Config:lockfile_path", "f:Config:size", "f:Config:indent", "f:Config:minify", "f:Config:read_only", "f:Config:read_only_jsonc", "f:Config:strict_schema", "f:Config:schema_path", "f:Config:sync_mode", "f:Config:isolate_commits", "f:Config:backup_dir", "f:Config:backup_interval", "f:Config:backup_retention",
+	"f:Config:close", "f:Config:backup_now",
+	
 	"v:Config:__enter__:tx", "v:Config:__exit__:tx", "f:Config:view", "f:Config:snapshot", "f:Config:snapshot_locked", "f:Config:copy", "f:Config:pop:action", "f:Config:run_edit*", "f:Config:raise_if_used_inside_transaction", "f:Config:read_json_object", "f:Config:load_schema*", "f:Config:validate_schema*", "f:Config:reload_locked*", "f:Config:ensure_recent_locked", "f:Config:atomic_write*", "f:Config:detach*",
 	"f:LinesConfig:__init__*", "attr:LinesConfig:log", "attr:LinesConfig:_path", "attr:LinesConfig:_lockfile_path", "attr:LinesConfig:_sync_mode", "attr:LinesConfig:_lock", "attr:LinesConfig:_snapshot", "attr:LinesConfig:_snapshot_signature", "attr:LinesConfig:_backup_dir", "attr:LinesConfig:_backup_interval", "attr:LinesConfig:_backup_retention", "attr:LinesConfig:_backup_stop",
-	"attr:LinesConfig:_backup_t",
+	"attr:LinesConfig:_backup_t", "f:LinesConfig:path", "f:LinesConfig:lockfile_path", "f:LinesConfig:size", "f:LinesConfig:max_size_mb", "f:LinesConfig:backup_dir", "f:LinesConfig:backup_interval", "f:LinesConfig:append*", "f:LinesConfig:append_many*", "f:LinesConfig:_append_lines*", "f:LinesConfig:tail*", "f:LinesConfig:read_all", "f:LinesConfig:snapshot", "f:LinesConfig:first*", "f:LinesConfig:count",
+	"f:LinesConfig:clear", "f:LinesConfig:compact*", "f:LinesConfig:backup_now", "f:LinesConfig:close",
 	"f:validate_panel_limit", "v:validate_panel_limit:panels", "v:validate_panel_limit:name", "v:validate_panel_limit:names",
-	"f:_nonempty_str", "f:check_config_document", "v:check_config_document:profiles", "v:check_config_document:auth", "f:config_etag", "f:apply_config_patch", "f:_is_json_value",
+	"f:_no,nempty_str", "f:check_config_document", "v:check_config_document:profiles", "v:check_config_document:auth", "f:config_etag", "f:apply_config_patch", "f:_is_json_value",
 	"c:LiveState", "c:CPUInfo", "c:LoadAverage", "c:RamInfo", "c:SwapInfo", "c:SystemMemory", "c:IPList", "c:ConnCount", "c:AppMemory", "c:GCGenStats", "c:GCStats", "c:ThreadInfo", "c:HealthStatus", "c:FullSystemInfo",
 	"f:_proc_text",
 	"f:trace", "f:font_version", "f:embed_font_faces",
@@ -52,7 +56,8 @@
 	"f:save", "f:draw_stacked", "v:draw_stacked:left", "v:draw_stacked:right", "f:draw_stacked:time_x",
 	"f:bandwidth_chart", "f:leaderboard_chart", "f:parse_edit_expiry", "f:_custom_id", "f:_dispatch", "f:interaction_limit", "c:PendingConfirmation",
 	"f:db/backup.py:instance_backup_dir", "f:db/backup.py:prune_backups", "f:db/backup.py:do_backup",
-	"f:config/backup.py:instance_backup_dir", "f:config/backup.py:prune_backups", "f:config/backup.py:do_backup"
-	
-
+	"f:config/backup.py:instance_backup_dir", "f:config/backup.py:prune_backups", "f:config/backup.py:do_backup",
+	"attr:Logger:_instances", "attr:Logger:_shared_handlers", "attr:Logger:_registry_lock", "f:Logger:_make_formatter",
+	"f:Connection:execute*", "f:Connection:_execute*", "f:Connection:executemany*", "f:Connection:_executemany*", "f:Connection:rows*", "f:Connection:_rows*", "f:Connection:row*", "f:Connection:_row*",
+	"f:make_backup_thread:log_faliure", "f:make_backup:loop"
 ]

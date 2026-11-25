@@ -155,6 +155,8 @@ def plan_attributes(
         # Escape checks depend on the receiver family, not the selected field.
         # Several fields of the same class can share that whole-tree check.
         verify_family = owner not in verified_families
+        if verify_family:
+            flow.prepare_contexts(family)
         for node in nodes:
             if id(node) in analysis.annotation_nodes:
                 continue
@@ -200,7 +202,7 @@ def plan_attributes(
                     raise ValueError(f"Unresolved reflective attribute receiver: {ast.unparse(node)!r}")
                 continue
             if verify_family:
-                flow.verify_call(node, family)
+                flow.verify_contextual_call(node, family)
         verified_families.add(owner)
         if binding is None and not references:
             raise ValueError(f"Allowlist {entry!r}: attribute target not found")
