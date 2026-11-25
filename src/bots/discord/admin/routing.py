@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import ClassVar, cast
 
 import discord
+
 from bots.discord.composition import AdminFeatureMixin
 
 __all__ = ["AdminRoutingMixin"]

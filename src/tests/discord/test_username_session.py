@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import cast
 
+import discord
 import pytest
 
-import discord
 from bots.discord.exceptions import SessionExpiredError
 from tests.support.discord import FakeInteraction, make_bots
 

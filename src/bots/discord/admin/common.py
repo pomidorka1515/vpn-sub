@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
 import discord
+
 from bots.discord.composition import AdminFeatureMixin
 
 if TYPE_CHECKING:

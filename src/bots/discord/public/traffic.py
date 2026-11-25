@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING, cast
 
 import discord
+
 from bots.discord.composition import PublicFeatureMixin
 from chart import bandwidth_chart
 from util import fmt_bytes, format_usage, truncate_utf8
