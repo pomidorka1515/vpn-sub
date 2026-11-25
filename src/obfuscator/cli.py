@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from time import monotonic
 
 from .parallel import default_jobs
 from .pipeline import obfuscate_modules
@@ -38,7 +39,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
-    print("Renaming classes enabled. Beware of mangled log output.", file=sys.stderr)
+    print("Renaming classes enabled. Beware of mangled log output.", file=sys.stderr, flush=True)
     source = args.source.resolve()
     output = args.output.resolve()
     if output == source or output in source.parents or source in output.parents:
@@ -61,8 +62,15 @@ def main() -> None:
     count = len(originals)
     if not originals:
         raise SystemExit("No application Python modules found")
+    started = monotonic()
+
+    def report_progress(stage: str) -> None:
+        print(f"[{monotonic() - started:.1f}s] {stage}...", file=sys.stderr, flush=True)
+
     try:
-        result = obfuscate_modules(originals, read_allowlist(args.allowlist), jobs=args.jobs)
+        result = obfuscate_modules(
+            originals, read_allowlist(args.allowlist), jobs=args.jobs, progress=report_progress
+        )
     except ValueError as error:
         parser.error(str(error))
     output.mkdir(parents=True, exist_ok=args.force)

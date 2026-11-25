@@ -243,7 +243,17 @@ def test_cli_always_warns_about_class_renaming(
         capture_output=True,
         text=True,
     )
-    assert result.stderr == "Renaming classes enabled. Beware of mangled log output.\n"
+    warning, *progress = result.stderr.splitlines()
+    assert warning == "Renaming classes enabled. Beware of mangled log output."
+    assert [line.split("] ", 1)[1] for line in progress] == [
+        "Parsing 1 application modules...",
+        "Discovering protocols and preparing modules...",
+        "Linking modules and folding mixins...",
+        "Analyzing dataclasses...",
+        "Renaming private methods and parameters...",
+        "Applying the rename allowlist...",
+        "Minifying and validating app.min.py...",
+    ]
     assert ("c:Helper ->" in result.stdout) == (report and allowlist != "[]")
     namespace: dict[str, Any] = {}
     exec(  # ruff: ignore[exec-builtin] - Fixed fixture.

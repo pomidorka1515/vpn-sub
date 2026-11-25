@@ -306,6 +306,7 @@ pieces are left unchanged. Queries are never executed during minification.
 The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
+The CLI reports build stages and elapsed time on stderr as the build runs.
 `--jobs N` controls a reusable multiprocessing executor, defaulting to half the
 CPUs available to the process (rounded down, minimum one). `--jobs 1` runs without
 worker processes. Parsing, each cross-module protocol-discovery round, per-module
@@ -462,6 +463,10 @@ calls, and inline literal `**kwargs` keys are rewritten together. Unknown
 receivers, polymorphic overrides, external/dynamic receiver hierarchies,
 escaping parameter APIs, dynamic keyword dictionaries, runtime field renames,
 and unsupported bindings cause errors rather than speculative rewrites.
+For method names, visible callers can resolve a receiver even when its protocol
+annotation was stripped, including values passed through supported dataclass
+constructors into fields. Unrelated same-named methods are left alone; a call
+site that can dispatch to both a selected method and another method still fails.
 Quoted runtime type references also prevent selecting names they depend on;
 strings used as `typing.Literal` values or `typing.Annotated` metadata are data,
 not type references. In particular, `Literal["ok"]` does not block `f:ok`.

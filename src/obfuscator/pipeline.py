@@ -33,6 +33,7 @@ from .sql import minify_sql_literals
 
 if TYPE_CHECKING:
     from collections import Counter
+    from collections.abc import Callable
 
 __all__: list[str] = [
     "ObfuscationResult",
@@ -53,7 +54,11 @@ class ObfuscationResult:
 
 
 def obfuscate_modules(
-    originals: dict[Path, str], entries: list[str], *, jobs: int | None = None
+    originals: dict[Path, str],
+    entries: list[str],
+    *,
+    jobs: int | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> ObfuscationResult:
     """Prepare, link, rename, and minify a set of relative application sources."""
     if not originals:
@@ -69,7 +74,7 @@ def obfuscate_modules(
         if workers > 1
         else nullcontext(None)
     ) as executor:
-        return _obfuscate_modules(originals, entries, executor)
+        return _obfuscate_modules(originals, entries, executor, progress)
 
 
 def _parse_module(item: tuple[Path, str]) -> tuple[ast.Module, set[str]]:
@@ -115,8 +120,16 @@ def _prepare_module(
 
 
 def _obfuscate_modules(
-    originals: dict[Path, str], entries: list[str], executor: ProcessPoolExecutor | None
+    originals: dict[Path, str],
+    entries: list[str],
+    executor: ProcessPoolExecutor | None,
+    progress: Callable[[str], None] | None,
 ) -> ObfuscationResult:
+    def announce(stage: str) -> None:
+        if progress is not None:
+            progress(stage)
+
+    announce(f"Parsing {len(originals)} application modules")
     trees: dict[str, ast.Module] = {}
     generic_classes: set[str] = set()
     parsed: dict[Path, ast.Module] = {}
@@ -133,6 +146,7 @@ def _obfuscate_modules(
         generic_classes.update(classes)
     # Protocol inheritance can cross module boundaries, so discover it until
     # importing a protocol from another module adds no new protocol classes.
+    announce("Discovering protocols and preparing modules")
     protocol_classes: set[tuple[str, str]] = set()
     while True:
         discovered = set[tuple[str, str]]().union(
@@ -157,6 +171,7 @@ def _obfuscate_modules(
         parsed.items(),
     )
     trees = {module_name(relative): tree for relative, tree in zip(parsed, prepared, strict=True)}
+    announce("Linking modules and folding mixins")
     # Analyze the final lexical scope: module-qualified data references no
     # longer look like reflective escapes, and every internal caller is linked.
     linked = flatten(trees)
@@ -172,13 +187,17 @@ def _obfuscate_modules(
             node.__dict__.setdefault("original_name", node.id)
         elif isinstance(node, ast.arg):
             node.__dict__.setdefault("original_name", node.arg)
+    announce("Analyzing dataclasses")
     minify_dataclasses(linked)
     linked_trees = {"__main__": linked}
+    announce("Renaming private methods and parameters")
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
     renamer = ArgumentRenamer(linked_trees)
     renamer.run()
+    announce("Applying the rename allowlist")
     renames = AllowlistRenamer(linked).apply(entries)
+    announce("Minifying and validating app.min.py")
     inline_constants(linked)
     consolidate_aliases(linked)
     shorten_imports(linked)
