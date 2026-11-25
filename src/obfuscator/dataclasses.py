@@ -16,7 +16,6 @@ class _Dataclasses(ArgumentRenamer):
     def __init__(self, tree: ast.Module) -> None:
         super().__init__({"__main__": tree})
         self.tree = tree
-        self.nodes = list(ast.walk(tree))
         self.classes = {node for node in self.nodes if isinstance(node, ast.ClassDef)}
         self.records = {
             node
@@ -216,7 +215,16 @@ class _Dataclasses(ArgumentRenamer):
             if isinstance(parent, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
                 destinations = parent.targets if isinstance(parent, ast.Assign) else [parent.target]
                 if not all(
-                    targets <= self.values(destination)
+                    (
+                        targets <= self.values(destination)
+                        and (
+                            not isinstance(destination, ast.Name)
+                            or (
+                                (binding := self.bindings.get(destination)) is not None
+                                and len(self.definitions(binding)) == 1
+                            )
+                        )
+                    )
                     or self.instance_attribute_owner(destination) is not None
                     for destination in destinations
                 ):

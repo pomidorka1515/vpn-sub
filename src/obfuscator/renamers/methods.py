@@ -27,9 +27,9 @@ def rename_constructor_classes(tree: ast.Module) -> None:
     names may be resolved later by dacite or typing, outside lexical binding.
     """
     analysis = ArgumentRenamer({"__main__": tree})
-    if inspects_frames(tree) or getattr(tree, "tainted", False):
+    if inspects_frames(analysis.nodes) or getattr(tree, "tainted", False):
         return
-    nodes = list(ast.walk(tree))
+    nodes = analysis.nodes
     analysis.used.update(analysis.strings)
     quoted_names: set[str] = set()
     reflected_classes: set[ast.ClassDef] = set()
@@ -132,8 +132,8 @@ class PrivateMethodRenamer(ArgumentRenamer):
         # Reserve attributes too: a new method must never shadow instance data,
         # another class member, or an attribute queried by its literal name.
         self.used.update(self.strings)
-        for tree in self.trees.values():
-            for node in ast.walk(tree):
+        for nodes in self.module_nodes.values():
+            for node in nodes:
                 if id(node) in self.annotation_nodes:
                     continue
                 self.used.update(binding.name for binding in self.node_bindings(node))
@@ -163,10 +163,15 @@ class PrivateMethodRenamer(ArgumentRenamer):
 def rename_private_classes(tree: ast.Module) -> None:
     """Shorten private classes after internal imports have been linked."""
     analysis = ArgumentRenamer({"__main__": tree})
-    used = {binding.name for node in ast.walk(tree) for binding in analysis.node_bindings(node)}
-    used.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
-    used.update(node.arg for node in ast.walk(tree) if isinstance(node, ast.arg))
-    used.update(node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute))
+    used: set[str] = set()
+    for node in analysis.nodes:
+        used.update(binding.name for binding in analysis.node_bindings(node))
+        if isinstance(node, ast.Name):
+            used.add(node.id)
+        elif isinstance(node, ast.arg):
+            used.add(node.arg)
+        elif isinstance(node, ast.Attribute):
+            used.add(node.attr)
     used.update(analysis.strings)
     annotations: list[tuple[ast.Constant, ast.Expression, str]] = []
 
@@ -185,13 +190,13 @@ def rename_private_classes(tree: ast.Module) -> None:
             for child in ast.iter_child_nodes(node):
                 bind_annotation(child, namespace)
 
-    for node in ast.walk(tree):
+    for node in analysis.nodes:
         if isinstance(node, ast.AnnAssign):
             bind_annotation(node.annotation, cast(ast.AST, node.__dict__["namespace"]))
     number = 0
     members: dict[ast.ClassDef, tuple[str, str]] = {}
     renamed: set[int] = set()
-    for node in ast.walk(tree):
+    for node in analysis.nodes:
         if (
             not isinstance(node, ast.ClassDef)
             or node.__dict__.get("no_rename")

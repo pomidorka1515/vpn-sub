@@ -88,7 +88,10 @@ class TriggerParser:
 
     def take(self, *words: str) -> bool:
         end = self.position + len(words)
-        if [text.upper() for _, text in self.parts[self.position : end]] != list(words):
+        if end > len(self.parts) or any(
+            self.parts[self.position + index][1].upper() != word
+            for index, word in enumerate(words)
+        ):
             return False
         self.position = end
         return True

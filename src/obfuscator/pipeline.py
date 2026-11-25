@@ -182,8 +182,13 @@ def _obfuscate_modules(
     announce("Renaming private methods and parameters")
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
+    renamed_methods = methods.renamed
+    del methods
     renamer = ArgumentRenamer(linked_trees)
     renamer.run()
+    renamed_parameters = renamer.renamed
+    skipped_parameters = renamer.skipped
+    del renamer
     announce("Applying the rename allowlist")
     renames = AllowlistRenamer(linked).apply(entries) if entries else {}
     announce("Minifying and validating app.min.py")
@@ -193,9 +198,9 @@ def _obfuscate_modules(
     return ObfuscationResult(
         source=minify_tree(linked, "app.min.py", rename_globals=True, executor=executor),
         renames=renames,
-        renamed_parameters=renamer.renamed,
-        skipped_parameters=renamer.skipped,
-        renamed_methods=methods.renamed,
+        renamed_parameters=renamed_parameters,
+        skipped_parameters=skipped_parameters,
+        renamed_methods=renamed_methods,
     )
 
 

@@ -6,6 +6,7 @@ import inspect
 import re
 import typing
 from abc import ABCMeta
+from collections import deque
 from importlib import import_module
 from textwrap import dedent
 from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, ModuleType, UnionType
@@ -411,17 +412,21 @@ class ExternalMembers:
                 positional = node.args.posonlyargs + node.args.args
                 if positional:
                     receivers.add(positional[0].arg)
-        # Receiver aliases must not hide escapes or namespace inspection.
-        while True:
-            previous = receivers.copy()
-            for node in nodes:
-                if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Name) and (
-                    node.value.id in receivers
-                ):
-                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                    receivers.update(target.id for target in targets if isinstance(target, ast.Name))
-            if previous == receivers:
-                break
+        # Solve alias reachability once rather than rescanning every AST node
+        # for each link in a chain. Cycles terminate at the visited-name set.
+        aliases: dict[str, list[str]] = {}
+        for node in nodes:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Name):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                aliases.setdefault(node.value.id, []).extend(
+                    target.id for target in targets if isinstance(target, ast.Name)
+                )
+        pending = deque(receivers)
+        while pending:
+            for name in aliases.get(pending.popleft(), ()):
+                if name not in receivers:
+                    receivers.add(name)
+                    pending.append(name)
         for node in nodes:
             if isinstance(node, ast.Attribute):
                 names.add(node.attr)

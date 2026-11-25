@@ -27,47 +27,34 @@ def module_name(path: Path) -> str:
 def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast.Module:
     """Link application bindings directly into one global scope, like includes."""
     analysis = ArgumentRenamer(trees)
+    preserved_definitions: dict[ast.AST, str] = {}
+    used: set[str] = set()
     # Retain source spellings for allowlist selection after collision linking.
     for module, tree in trees.items():
         source_file = module.replace(".", "/")
         source_file += "/__init__.py" if tree.__dict__.get("is_package") else ".py"
-        for node in ast.walk(tree):
+        for node in analysis.module_nodes[module]:
             node.__dict__.setdefault("original_file", source_file)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 node.__dict__.setdefault("original_name", node.name)
+                if (isinstance(node, ast.ClassDef) and not node.name.startswith("_")) or node.__dict__.get("no_rename"):
+                    preserved_definitions[node] = node.name
             elif isinstance(node, ast.Name):
                 node.__dict__.setdefault("original_name", node.id)
+                used.add(node.id)
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
-    preserved_definitions = {
-        node: node.name
-        for tree in trees.values()
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        and (
-            (isinstance(node, ast.ClassDef) and not node.name.startswith("_"))
-            or node.__dict__.get("no_rename")
-        )
-    }
-    used = {
-        node.id for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.Name)
-    }
-    used.update(
-        node.arg for tree in trees.values() for node in ast.walk(tree) if isinstance(node, ast.arg)
-    )
-    used.update(
-        binding.name
-        for tree in trees.values()
-        for node in ast.walk(tree)
-        for binding in analysis.node_bindings(node)
-    )
+                used.add(node.arg)
+            used.update(binding.name for binding in analysis.node_bindings(node))
+    next_names: dict[str, int] = {}
 
     def fresh(prefix: str) -> str:
-        number = 0
+        number = next_names.get(prefix, 0)
         while f"{prefix}{number}" in used:
             number += 1
         name = f"{prefix}{number}"
         used.add(name)
+        next_names[prefix] = number + 1
         return name
 
     names: dict[int, str] = {}
@@ -172,8 +159,8 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
 
     # Removing ``worker.`` can expose a real collision with a caller's local
     # ``calculate``. Rename the linked symbol only when such capture occurs.
-    for tree in trees.values():
-        for node in ast.walk(tree):
+    for nodes in analysis.module_nodes.values():
+        for node in nodes:
             if not isinstance(node, (ast.Name, ast.Attribute)):
                 continue
             target = reference(node)
@@ -186,7 +173,7 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                 bindings = (
                     analysis.node_bindings(scope)
                     if not isinstance(scope, ast.ClassDef) or scope is initial
-                    else []
+                    else ()
                 )
                 shadow = next((binding for binding in bindings if binding.name == name), None)
                 # Pure import bindings disappear during linking, so cannot
@@ -210,8 +197,8 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                 scope = cast(ast.AST, scope.__dict__["namespace"])
 
     replacements: dict[ast.AST, ast.expr] = {}
-    for module, tree in trees.items():
-        for node in ast.walk(tree):
+    for module in trees:
+        for node in analysis.module_nodes[module]:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if alias.name == "*":

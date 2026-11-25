@@ -57,7 +57,7 @@ _WRAPPER_NAMES: frozenset[str] = frozenset(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TypeHint:
     """An annotation reduced to internal classes and container structure."""
 
@@ -117,12 +117,16 @@ def _merge_many(hints: tuple[TypeHint, ...] | list[TypeHint]) -> TypeHint:
 
 def merge_hints(*hints: TypeHint) -> TypeHint:
     """Merge value types from alternative expressions or declarations."""
-    return _merge_many(list(hints))
+    return _merge_many(hints)
 
 
 def _merge(left: TypeHint, right: TypeHint) -> TypeHint:
     merged = _merge_shape(left, right)
-    return replace(merged, incomplete=True) if left.incomplete or right.incomplete else merged
+    return (
+        replace(merged, incomplete=True)
+        if (left.incomplete or right.incomplete) and not merged.incomplete
+        else merged
+    )
 
 
 def _merge_shape(left: TypeHint, right: TypeHint) -> TypeHint:

@@ -38,6 +38,7 @@ def read_allowlist(value: str) -> list[str]:
     if not isinstance(decoded, list):
         raise ValueError("Allowlist must be a JSON list of strings")
     result: list[str] = []
+    seen: set[str] = set()
     for entry in cast(list[object], decoded):
         if not isinstance(entry, str):
             raise ValueError("Allowlist must be a JSON list of strings")
@@ -56,8 +57,9 @@ def read_allowlist(value: str) -> list[str]:
             raise ValueError(
                 f"Invalid allowlist entry {entry!r}; expected c:path, f:path, f:path*, a:path:arg, attr:class:name or v:path"
             )
-        if entry in result:
+        if entry in seen:
             raise ValueError(f"Duplicate allowlist entry {entry!r}")
+        seen.add(entry)
         result.append(entry)
     return result
 
@@ -74,14 +76,14 @@ class AllowlistRenamer(ArgumentRenamer):
         self.linked_classes: dict[Binding, ast.ClassDef] = {}
         super().__init__({"__main__": tree})
         self.tree = tree
-        for node in ast.walk(tree):
+        for node in self.nodes:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 node.__dict__.setdefault("original_name", node.name)
             elif isinstance(node, ast.Name):
                 node.__dict__.setdefault("original_name", node.id)
             elif isinstance(node, ast.arg):
                 node.__dict__.setdefault("original_name", node.arg)
-        self.classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+        self.classes = [node for node in self.nodes if isinstance(node, ast.ClassDef)]
         self.own_members: dict[ast.ClassDef, dict[str, Binding]] = {
             owner: {binding.name: binding for binding in reversed(self.node_bindings(owner))}
             for owner in self.classes
@@ -401,7 +403,7 @@ class AllowlistRenamer(ArgumentRenamer):
             self, attribute_entries
         )
         candidates: dict[tuple[str, ...], list[tuple[str, Binding, ast.AST]]] = {}
-        for scope in ast.walk(self.tree):
+        for scope in self.nodes:
             for binding in self.node_bindings(scope):
                 if isinstance(cast(object, binding), BuiltinBinding):
                     continue
@@ -614,7 +616,7 @@ class AllowlistRenamer(ArgumentRenamer):
         if selected.keys() & attribute_bindings.keys():
             raise ValueError("Conflicting variable and attribute allowlist selections")
         self.used.update(self.strings)
-        for node in ast.walk(self.tree):
+        for node in self.nodes:
             if isinstance(node, ast.Name):
                 self.used.add(node.id)
             elif isinstance(node, (ast.arg, ast.keyword)) and node.arg is not None:
@@ -651,12 +653,12 @@ class AllowlistRenamer(ArgumentRenamer):
         }
         if constructors:
             if (
-                inspects_frames(self.tree)
+                inspects_frames(self.nodes)
                 or getattr(self.tree, "tainted", False)
                 or "__init__" in self.strings
             ):
                 raise ValueError("Escaping/reflected constructor with allowlisted parameters")
-            for node in ast.walk(self.tree):
+            for node in self.nodes:
                 reflected_receiver: ast.expr
                 if (
                     isinstance(node, ast.Call)
@@ -681,7 +683,7 @@ class AllowlistRenamer(ArgumentRenamer):
         member_families: dict[str, set[ast.ClassDef]] = {}
         selected_names = {binding.name for binding in selected}
         # Resolve everything against the original tree before mutating any name.
-        for node in ast.walk(self.tree):
+        for node in self.nodes:
             if id(node) in self.annotation_nodes:
                 continue
             if isinstance(node, ast.Attribute) and node.attr in member_names:

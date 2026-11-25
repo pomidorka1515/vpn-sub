@@ -23,8 +23,8 @@ def plan_attributes(
     report: dict[str, str] = {}
     if not entries:
         return changes, bindings, report
-    nodes = list(ast.walk(analysis.tree))
-    if inspects_frames(analysis.tree) or getattr(analysis.tree, "tainted", False):
+    nodes = analysis.nodes
+    if inspects_frames(nodes) or getattr(analysis.tree, "tainted", False):
         raise ValueError("Cannot rename attributes in a reflective namespace")
     flow = analysis.attribute_flow
     analysis.used.update(analysis.strings)

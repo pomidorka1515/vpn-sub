@@ -11,8 +11,14 @@ def strip_typing_imports(tree: ast.Module, typing_modules: set[str]) -> ast.Modu
 
     Preserve postponed annotations: surviving fields may contain forward references.
     """
-    used = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    used: set[str] = set()
+    imports: list[ast.Import | ast.ImportFrom] = []
     for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            used.add(node.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            imports.append(node)
+    for node in imports:
         if isinstance(node, ast.Import):
             if any(alias.name in typing_modules for alias in node.names):
                 node.names = [
@@ -20,7 +26,7 @@ def strip_typing_imports(tree: ast.Module, typing_modules: set[str]) -> ast.Modu
                     for alias in node.names
                     if alias.name not in typing_modules or (alias.asname or alias.name) in used
                 ]
-        elif isinstance(node, ast.ImportFrom):
+        else:
             if node.module in typing_modules:
                 node.names = [
                     name

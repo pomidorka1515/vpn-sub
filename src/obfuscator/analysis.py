@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ast
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 __all__: list[str] = ["Binding", "Function", "annotation_nodes", "inspects_frames"]
 
@@ -9,25 +12,25 @@ __all__: list[str] = ["Binding", "Function", "annotation_nodes", "inspects_frame
 type Function = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
 
-def annotation_nodes(tree: ast.Module) -> set[int]:
+def annotation_nodes(tree: ast.Module | Iterable[ast.AST]) -> set[int]:
     """Node identities inside annotation subtrees, which are release metadata."""
     excluded: set[int] = set()
-    for node in ast.walk(tree):
-        roots: list[ast.expr] = []
+    for node in ast.walk(tree) if isinstance(tree, ast.Module) else tree:
+        root: ast.expr | None = None
         if isinstance(node, ast.arg) and node.annotation is not None:
-            roots.append(node.annotation)
+            root = node.annotation
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.returns is not None:
-            roots.append(node.returns)
+            root = node.returns
         elif isinstance(node, ast.AnnAssign):
-            roots.append(node.annotation)
+            root = node.annotation
         elif isinstance(node, ast.TypeAlias):
-            roots.append(node.value)
-        for root in roots:
+            root = node.value
+        if root is not None:
             excluded.update(id(child) for child in ast.walk(root))
     return excluded
 
 
-def inspects_frames(tree: ast.Module) -> bool:
+def inspects_frames(tree: ast.Module | Iterable[ast.AST]) -> bool:
     """Frame/stack APIs can expose names in any active lexical scope."""
     frame_apis = {
         "_getframe",
@@ -49,7 +52,7 @@ def inspects_frames(tree: ast.Module) -> bool:
             and not node.args
             and not node.keywords
         )
-        for node in ast.walk(tree)
+        for node in (ast.walk(tree) if isinstance(tree, ast.Module) else tree)
     )
 
 

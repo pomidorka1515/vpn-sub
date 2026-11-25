@@ -32,6 +32,12 @@ class Value:
             return self
         if self is _BOTTOM:
             return other
+        if (other.owners.issubset(self.owners) and other.functions.issubset(self.functions)
+                and (self.unknown or not other.unknown)):
+            return self
+        if (self.owners.issubset(other.owners) and self.functions.issubset(other.functions)
+                and (other.unknown or not self.unknown)):
+            return other
         return Value(self.owners | other.owners, self.functions | other.functions, self.unknown or other.unknown)
 
 
@@ -49,7 +55,7 @@ class AttributeFlow:
 
     def __init__(self, analysis: AllowlistRenamer) -> None:
         self.analysis: AllowlistRenamer = analysis
-        self.nodes: list[ast.AST] = [node for node in ast.walk(analysis.tree) if id(node) not in analysis.annotation_nodes]
+        self.nodes: list[ast.AST] = [node for node in analysis.nodes if id(node) not in analysis.annotation_nodes]
         self.arguments: dict[Binding, Value] = {}
         self.fields: dict[tuple[ast.ClassDef, str], Value] = {}
         self.external_types: dict[str, type | None] = {}
@@ -142,7 +148,7 @@ class AttributeFlow:
                 bound[keyword.arg] = keyword.value
         for name, default in fields.items():
             expression = bound.get(name, default)
-            self.add_field(owner, name, self.value(expression) if valid and expression is not None else Value(unknown=True))
+            self.add_field(owner, name, self.value(expression) if valid and expression is not None else _UNKNOWN)
 
     def enclosing_function(self, node: ast.AST) -> Function | None:
         parent = self.analysis.parents.get(node)
@@ -153,7 +159,7 @@ class AttributeFlow:
         return None
 
     def join(self, values: list[Value]) -> Value:
-        result = Value()
+        result = _BOTTOM
         for value in values:
             result = result.merge(value)
         return result
@@ -170,7 +176,7 @@ class AttributeFlow:
 
     def value(self, node: ast.AST, seen: frozenset[ast.AST] = frozenset()) -> Value:
         if node in seen:
-            return Value()
+            return _BOTTOM
         cached = self.values.get(node)
         if cached is not None:
             return cached
@@ -184,7 +190,7 @@ class AttributeFlow:
 
     def expression(self, node: ast.AST, seen: frozenset[ast.AST]) -> Value:
         if node in seen:
-            return Value()
+            return _BOTTOM
         seen |= {node}
         analysis = self.analysis
         if isinstance(node, ast.Lambda):
@@ -199,7 +205,7 @@ class AttributeFlow:
             for definition in definitions:
                 if isinstance(definition, ast.arg) and binding is not None:
                     inferred = self.static_receiver(node)
-                    values.append(self.arguments.get(binding, Value()).merge(Value(inferred)))
+                    values.append(self.arguments.get(binding, _BOTTOM).merge(Value(inferred)))
                 elif isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     values.append(Value(functions=frozenset({CallableValue(definition)})))
                 elif isinstance(definition, ast.ClassDef):
@@ -212,29 +218,29 @@ class AttributeFlow:
                         inferred = self.static_receiver(node)
                         values.append(Value(inferred, unknown=not inferred))
                 else:
-                    values.append(Value(unknown=True))
+                    values.append(_UNKNOWN)
             if values:
                 return self.join(values)
         if isinstance(node, ast.Attribute):
             try:
                 inherited = analysis.super_bindings(node)
             except ValueError:
-                return Value(unknown=True)
+                return _UNKNOWN
             if inherited is not None:
                 methods: set[CallableValue] = set()
                 for binding in inherited:
                     definitions = analysis.definitions(binding)
                     if len(definitions) != 1:
-                        return Value(unknown=True)
+                        return _UNKNOWN
                     definition = definitions[0]
                     if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)) or analysis.is_property(definition):
-                        return Value(unknown=True)
+                        return _UNKNOWN
                     methods.add(CallableValue(definition, analysis.descriptor(definition) != "staticmethod"))
                 return Value(functions=frozenset(methods), unknown=not methods)
             receiver = self.value(node.value, seen)
             owners = receiver.owners
             if not owners and not receiver.functions and not receiver.unknown:
-                return Value()
+                return _BOTTOM
             values = []
             pending = False
             for owner in owners:
@@ -259,14 +265,14 @@ class AttributeFlow:
                     if node.attr in self.written_fields or (record is not None and node.attr in record[1]):
                         pending = True
                     else:
-                        values.append(Value(unknown=True))
+                        values.append(_UNKNOWN)
             if values:
                 result = self.join(values)
                 return result.merge(Value(unknown=receiver.unknown))
             if pending and not receiver.unknown:
                 # A visible store may acquire its incoming value in a later
                 # round. Bottom is pending evidence, not an opaque alternative.
-                return Value()
+                return _BOTTOM
         if isinstance(node, ast.Call):
             builtin = analysis.bindings.get(node.func)
             if (
@@ -298,17 +304,17 @@ class AttributeFlow:
         if isinstance(node, ast.Constant):
             # Literal values cannot hide an attribute consumer. In particular,
             # None in an optional receiver field is not an opaque alternative.
-            return Value()
+            return _BOTTOM
         # Preserve the existing rich type/with/unpacking inference as a seed.
         if isinstance(node, ast.expr):
             inferred = self.static_receiver(node)
             if inferred:
                 return Value(inferred)
-        return Value(unknown=True)
+        return _UNKNOWN
 
     def result(self, function: Function, seen: frozenset[ast.AST]) -> Value:
         if function in seen:
-            return Value()
+            return _BOTTOM
         return self.join([self.value(node, seen | {function}) for node in self.returns[function]])
 
     def targets(self, call: ast.Call) -> Value:
@@ -476,9 +482,9 @@ class AttributeFlow:
     def add_argument(self, argument: ast.arg, value: Value) -> None:
         binding = self.analysis.bindings.get(argument)
         if binding is not None:
-            previous = self.arguments.get(binding, Value())
+            previous = self.arguments.get(binding, _BOTTOM)
             updated = previous.merge(value)
-            if updated != previous:
+            if updated is not previous:
                 self.arguments[binding] = updated
                 self.changed = True
 
@@ -563,9 +569,9 @@ class AttributeFlow:
 
     def add_field(self, owner: ast.ClassDef, name: str, value: Value) -> None:
         key = (owner, name)
-        previous = self.fields.get(key, Value())
+        previous = self.fields.get(key, _BOTTOM)
         updated = previous.merge(value)
-        if updated != previous:
+        if updated is not previous:
             self.fields[key] = updated
             self.changed = True
 
@@ -579,7 +585,7 @@ class AttributeFlow:
             if target.bound:
                 positional = positional[1:]
             for argument in [*positional, *target.function.args.kwonlyargs]:
-                self.add_argument(argument, Value(unknown=True))
+                self.add_argument(argument, _UNKNOWN)
             self.open_callbacks(self.result(target.function, frozenset()), seen | {target.function})
 
     def receivers(self, node: ast.expr) -> set[ast.ClassDef]:

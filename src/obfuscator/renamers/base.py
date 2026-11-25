@@ -3,7 +3,8 @@ from __future__ import annotations
 import ast
 import keyword
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
 from python_minifier.ast_annotation import add_parent
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from ..analysis import Function
 
 __all__: list[str] = ["ArgumentRenamer"]
+
+_EMPTY_SYMBOLS: MappingProxyType[str, Binding] = MappingProxyType({})
+_RESERVED_NAMES: frozenset[str] = frozenset((*keyword.kwlist, "self", "cls"))
 
 
 class ArgumentRenamer:
@@ -44,7 +48,9 @@ class ArgumentRenamer:
         self.imports: dict[ast.alias, tuple[str, str | None]] = {}
         self.star_imports: set[str] = set()
         self.functions: list[Function] = []
-        self.used = set(keyword.kwlist) | {"self", "cls"}
+        self.nodes: list[ast.AST] = []
+        self.module_nodes: dict[str, list[ast.AST]] = {}
+        self.used = set(_RESERVED_NAMES)
         self.strings: set[str] = set()
         self.next_name = 0
         self.renamed = 0
@@ -58,9 +64,14 @@ class ArgumentRenamer:
             for operation in (add_parent, add_namespace, bind_names, resolve_names):
                 cast(Callable[[ast.Module], None], operation)(tree)
             self.symbols[module] = {binding.name: binding for binding in self.node_bindings(tree)}
-            for node in ast.walk(tree):
+            # Breadth-first, like ast.walk, but discover children only once:
+            # the same edges supply both the traversal and the parent index.
+            nodes: list[ast.AST] = [tree]
+            for node in nodes:
                 self.modules[node] = module
-                self.parents.update((child, node) for child in ast.iter_child_nodes(node))
+                for child in ast.iter_child_nodes(node):
+                    self.parents[child] = node
+                    nodes.append(child)  # ruff: ignore[loop-iterator-mutation] - Breadth-first queue.
                 for binding in self.node_bindings(node):
                     self.bindings.update((ref, binding) for ref in binding.references)
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -92,9 +103,9 @@ class ArgumentRenamer:
                         self.imports[alias] = (target, alias.name)
                         if alias.name == "*":
                             self.star_imports.add(target)
-        self.annotation_nodes = {
-            identity for tree in trees.values() for identity in annotation_nodes(tree)
-        }
+            self.nodes.extend(nodes)
+            self.module_nodes[module] = nodes
+        self.annotation_nodes = annotation_nodes(self.nodes)
         self.instance_assignments: dict[tuple[int, str], list[ast.Assign | ast.AnnAssign]] = {}
         for assignment in assignments:
             targets = assignment.targets if isinstance(assignment, ast.Assign) else [assignment.target]
@@ -107,8 +118,8 @@ class ArgumentRenamer:
                         ).append(assignment)
 
     @staticmethod
-    def node_bindings(node: ast.AST) -> list[Binding]:
-        return cast(list[Binding], node.__dict__.get("bindings") or [])
+    def node_bindings(node: ast.AST) -> Sequence[Binding]:
+        return cast(Sequence[Binding], node.__dict__.get("bindings") or ())
 
     def descriptor(self, function: Function) -> str | None:
         """Recognize only unshadowed builtin method descriptors, not arbitrary decorators."""
@@ -302,7 +313,7 @@ class ArgumentRenamer:
         """An external re-export is not a reflective use of its containing module."""
         if not isinstance(attribute.ctx, ast.Load) or attribute.attr.startswith("__"):
             return False
-        binding = self.symbols.get(module, {}).get(attribute.attr)
+        binding = self.symbols.get(module, _EMPTY_SYMBOLS).get(attribute.attr)
         definitions = self.definitions(binding) if binding is not None else []
         if len(definitions) != 1 or not isinstance(definitions[0], ast.alias):
             return False
@@ -354,7 +365,7 @@ class ArgumentRenamer:
             if name is None:
                 return module if module in self.trees else None
             target = self.binding_target(
-                self.symbols.get(module, {}).get(name), seen, instances=instances
+                self.symbols.get(module, _EMPTY_SYMBOLS).get(name), seen, instances=instances
             )
             return (
                 target
@@ -696,7 +707,7 @@ class ArgumentRenamer:
         if isinstance(owner, ast.ClassDef):
             return self.member_hint(owner, node.attr, seen)
         if isinstance(owner, str):
-            target = self.binding_target(self.symbols.get(owner, {}).get(node.attr), seen)
+            target = self.binding_target(self.symbols.get(owner, _EMPTY_SYMBOLS).get(node.attr), seen)
             if isinstance(target, ast.ClassDef):
                 return self.class_hint(target)
         return TypeHint()
@@ -854,7 +865,7 @@ class ArgumentRenamer:
             receiver_target = self.target(node.value, seen, instances=instances)
             if isinstance(receiver_target, str):
                 return self.binding_target(
-                    self.symbols.get(receiver_target, {}).get(node.attr),
+                    self.symbols.get(receiver_target, _EMPTY_SYMBOLS).get(node.attr),
                     seen,
                     instances=instances,
                 )
@@ -891,7 +902,7 @@ class ArgumentRenamer:
             return set()
         seen.add(module)
         exposed = {function for function in self.functions if self.modules[function] == module}
-        for binding in self.symbols.get(module, {}).values():
+        for binding in self.symbols.get(module, _EMPTY_SYMBOLS).values():
             target = self.binding_target(binding, set())
             if isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 exposed.add(target)
@@ -912,7 +923,7 @@ class ArgumentRenamer:
         reflected: set[Function] = set()
         by_name: dict[str, list[Function]] = {}
         methods_by_name: dict[str, list[Function]] = {}
-        if any(inspects_frames(tree) for tree in self.trees.values()):
+        if inspects_frames(self.nodes):
             # Stack/frame APIs can inspect any active scope, not just a known
             # function object. There is no safe cross-module rename in that case.
             reflected.update(self.functions)
@@ -973,8 +984,8 @@ class ArgumentRenamer:
                 # merely because its local name differs from the definition.
                 blocked.update(by_name.get(name, []))
                 reflected.update(by_name.get(name, []))
-        for tree in self.trees.values():
-            for node in ast.walk(tree):
+        for nodes in self.module_nodes.values():
+            for node in nodes:
                 if id(node) in self.annotation_nodes:
                     continue
                 if isinstance(node, ast.Call):
@@ -1148,25 +1159,8 @@ class ArgumentRenamer:
             # Reuse short names in independent scopes. Reserve every name in
             # this subtree (including closures), and every caller keyword, so
             # neither lexical capture nor accidental **kwargs capture is possible.
-            self.used = set(keyword.kwlist) | {"self", "cls"}
-            self.next_name = 0
-            for node in ast.walk(function):
-                self.used.update(binding.name for binding in self.node_bindings(node))
-                if isinstance(node, ast.Name):
-                    self.used.add(node.id)
-                elif isinstance(node, ast.arg):
-                    self.used.add(node.arg)
-                elif isinstance(node, (ast.Global, ast.Nonlocal)):
-                    self.used.update(node.names)
-            for call in calls[function]:
-                for call_keyword in call.keywords:
-                    if call_keyword.arg is not None:
-                        self.used.add(call_keyword.arg)
-                    else:
-                        self.used.update(
-                            cast(str, key.value)
-                            for key in self.literal_keywords(call_keyword) or []
-                        )
+            reserved = False
+            keyword_references: dict[str, list[ast.keyword | ast.Constant]] = {}
             decorated = (
                 not isinstance(function, ast.Lambda)
                 and bool(function.decorator_list)
@@ -1206,6 +1200,30 @@ class ArgumentRenamer:
                 ):
                     self.skipped["ambiguous lexical binding"] += 1
                     continue
+                if not reserved:
+                    # Most preserved APIs never need a fresh name. Do not walk
+                    # their bodies or inspect their caller dictionaries at all.
+                    self.used = set(_RESERVED_NAMES)
+                    self.next_name = 0
+                    for node in ast.walk(function):
+                        self.used.update(binding.name for binding in self.node_bindings(node))
+                        if isinstance(node, ast.Name):
+                            self.used.add(node.id)
+                        elif isinstance(node, ast.arg):
+                            self.used.add(node.arg)
+                        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+                            self.used.update(node.names)
+                    for call in calls[function]:
+                        for call_keyword in call.keywords:
+                            if call_keyword.arg is not None:
+                                self.used.add(call_keyword.arg)
+                                keyword_references.setdefault(call_keyword.arg, []).append(call_keyword)
+                            else:
+                                for key in self.literal_keywords(call_keyword) or ():
+                                    spelling = cast(str, key.value)
+                                    self.used.add(spelling)
+                                    keyword_references.setdefault(spelling, []).append(key)
+                    reserved = True
                 new = self.fresh_name()
                 # NameBinding.rename normally keeps keyword-capable arg names
                 # and inserts aliases. We rewrite verified callers instead.
@@ -1215,14 +1233,11 @@ class ArgumentRenamer:
                 argument.arg = new
                 self.renamed += 1
                 if argument in parameters:
-                    for call in calls[function]:
-                        for keyword_arg in call.keywords:
-                            if keyword_arg.arg == old:
-                                keyword_arg.arg = new
-                            elif keyword_arg.arg is None:
-                                for key in self.literal_keywords(keyword_arg) or []:
-                                    if key.value == old:
-                                        key.value = new
+                    for reference in keyword_references.get(old, ()):
+                        if isinstance(reference, ast.keyword):
+                            reference.arg = new
+                        else:
+                            reference.value = new
 
     @staticmethod
     def literal_keywords(argument: ast.keyword) -> list[ast.Constant] | None:
