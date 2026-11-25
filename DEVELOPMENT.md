@@ -8,6 +8,7 @@ vpn-sub. For deployment and operation, see [README.md](README.md).
 These rules are mandatory for all Python source files, including scripts, tests,
 and package `__init__.py` files:
 
+- **Commit style.** Conside, 72 chars at most. Must start with a package/module name, e.g. `docs: `, `core: ...`.
 - **Full type hints everywhere.** Annotate function and method parameters and
   return types, as well as module variables, class attributes, and instance
   attributes. Keep callbacks and generic types fully typed too.
@@ -465,8 +466,10 @@ escaping parameter APIs, dynamic keyword dictionaries, runtime field renames,
 and unsupported bindings cause errors rather than speculative rewrites.
 For method names, visible callers can resolve a receiver even when its protocol
 annotation was stripped, including values passed through supported dataclass
-constructors into fields. Unrelated same-named methods are left alone; a call
-site that can dispatch to both a selected method and another method still fails.
+constructors into fields. External receiver hints also follow straight-line local
+rebindings and imported unions of `TypedDict` types (for example, `scope = scope.copy()`).
+Unrelated same-named methods are left alone; a call site that can dispatch to both
+a selected method and another method still fails.
 Quoted runtime type references also prevent selecting names they depend on;
 strings used as `typing.Literal` values or `typing.Annotated` metadata are data,
 not type references. In particular, `Literal["ok"]` does not block `f:ok`.

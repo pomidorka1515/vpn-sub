@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 __all__: list[str] = ["AnnotationIndex", "TypeHint", "merge_hints"]
 
@@ -66,6 +66,7 @@ class TypeHint:
     origin: str | None = None
     arguments: tuple[TypeHint, ...] = ()
     variadic: bool = False
+    incomplete: bool = False
 
     def __bool__(self) -> bool:
         return bool(self.classes or self.self_reference or self.origin or self.arguments)
@@ -120,6 +121,11 @@ def merge_hints(*hints: TypeHint) -> TypeHint:
 
 
 def _merge(left: TypeHint, right: TypeHint) -> TypeHint:
+    merged = _merge_shape(left, right)
+    return replace(merged, incomplete=True) if left.incomplete or right.incomplete else merged
+
+
+def _merge_shape(left: TypeHint, right: TypeHint) -> TypeHint:
     if not left:
         return right
     if not right:
@@ -144,6 +150,13 @@ def _merge(left: TypeHint, right: TypeHint) -> TypeHint:
         return TypeHint(classes, self_reference)
     holder = left if left.origin is not None else right
     return TypeHint(classes, self_reference, holder.origin, holder.arguments, holder.variadic)
+
+
+def _merge_alternatives(*hints: TypeHint) -> TypeHint:
+    result = merge_hints(*hints)
+    # Partial hints can still seed inference, but cannot prove that every
+    # possible receiver is disjoint from a selected class.
+    return replace(result, incomplete=True) if not all(hints) else result
 
 
 class AnnotationIndex:
@@ -295,6 +308,8 @@ class AnnotationIndex:
 
     def _hint(self, node: ast.expr) -> TypeHint:
         if isinstance(node, ast.Constant):
+            if node.value is None:
+                return TypeHint(("types.NoneType",))
             if isinstance(node.value, str):
                 try:
                     parsed = ast.parse(node.value, mode="eval")
@@ -334,7 +349,7 @@ class AnnotationIndex:
                 return TypeHint()
             elements = self._slice_elements(node.slice)
             if name in {"Optional", "Union"}:
-                return _merge_many([self._hint(element) for element in elements])
+                return _merge_alternatives(*(self._hint(element) for element in elements))
             if name in _WRAPPER_NAMES:
                 return self._hint(elements[0]) if elements else TypeHint()
             arguments = tuple(self._hint(element) for element in elements)
@@ -364,9 +379,9 @@ class AnnotationIndex:
                 )
             return self._hint(node.value)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-            return _merge(self._hint(node.left), self._hint(node.right))
+            return _merge_alternatives(self._hint(node.left), self._hint(node.right))
         if isinstance(node, ast.IfExp):
-            return _merge(self._hint(node.body), self._hint(node.orelse))
+            return _merge_alternatives(self._hint(node.body), self._hint(node.orelse))
         return TypeHint()
 
     def _slice_elements(self, node: ast.expr) -> list[ast.expr]:

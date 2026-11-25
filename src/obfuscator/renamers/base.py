@@ -464,6 +464,7 @@ class ArgumentRenamer:
             origin=hint.origin,
             arguments=hint.arguments,
             variadic=hint.variadic,
+            incomplete=hint.incomplete,
         )
 
     def definition_hint(self, definition: ast.AST, seen: set[int], owner: ast.ClassDef) -> TypeHint:
@@ -717,7 +718,11 @@ class ArgumentRenamer:
                 element = receiver.element()
                 if element:
                     return element
-            if node.func.attr == "copy" and receiver:
+            if (
+                node.func.attr == "copy"
+                and receiver.origin in {"mapping", "sequence"}
+                and not receiver.classes
+            ):
                 return receiver
         callable_owner = self.target(node.func, seen, instances=True)
         if isinstance(callable_owner, ast.ClassDef):
@@ -741,7 +746,7 @@ class ArgumentRenamer:
         # Attribute and call resolution repeatedly ask for the same hints.
         # Include the recursion context: a result truncated by a cycle must
         # not be reused for an independent traversal of the same expression.
-        key = (node, frozenset() if seen is None else frozenset(seen))
+        key: tuple[ast.AST, frozenset[int]] = (node, frozenset() if seen is None else frozenset(seen))
         cached = self.hint_cache.get(key)
         if cached is not None:
             return cached

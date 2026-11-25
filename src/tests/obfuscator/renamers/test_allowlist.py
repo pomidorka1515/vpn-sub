@@ -795,3 +795,70 @@ result = Service(Config(Pool(Database()))).run()
     namespace: dict[str, Any] = {}
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["result"] == 8
+
+
+def test_allowlist_method_copy_ignores_rebound_typed_dict_union() -> None:
+    source = """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from hypercorn.typing import Scope as RequestScope
+
+class Config:
+    def copy(self):
+        return 42
+
+class Middleware:
+    def run(self, scope: RequestScope):
+        scope = scope.copy()
+        backup = scope.copy()
+        backup['type'] = 'websocket'
+        return scope, backup
+
+__result__ = Config().copy(), Middleware().run({'type': 'http'})
+"""
+    result, renames = allowlisted(source, ["f:Config:copy"])
+    assert f".{renames['f:Config:copy']}()" in result
+    assert result.count(".copy()") == 2
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (42, ({"type": "http"}, {"type": "websocket"}))
+
+
+def test_allowlist_method_copy_rejects_conditional_rebinding_to_unknown() -> None:
+    source = """
+from __future__ import annotations
+from hypercorn.typing import Scope
+
+class Config:
+    def copy(self):
+        return 42
+
+def middleware(scope: Scope, opaque, flag):
+    if flag:
+        scope = opaque()
+    return scope.copy()
+
+__result__ = Config().copy()
+"""
+    with pytest.raises(ValueError, match=r"Unresolved receiver.*scope\.copy"):
+        allowlisted(source, ["f:Config:copy"])
+
+
+def test_allowlist_method_copy_rejects_incomplete_union() -> None:
+    source = """
+from __future__ import annotations
+from typing import Any
+from hypercorn.typing import Scope
+
+class Config:
+    def copy(self):
+        return 42
+
+def middleware(scope: Scope | Any):
+    return scope.copy()
+
+__result__ = Config().copy()
+"""
+    with pytest.raises(ValueError, match=r"Unresolved receiver.*scope\.copy"):
+        allowlisted(source, ["f:Config:copy"])

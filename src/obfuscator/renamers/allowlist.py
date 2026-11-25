@@ -660,6 +660,7 @@ class AllowlistRenamer(ArgumentRenamer):
                     for owner in owners
                 ):
                     raise ValueError("Escaping/reflected constructor with allowlisted parameters")
+        member_families: dict[str, set[ast.ClassDef]] = {}
         # Resolve everything against the original tree before mutating any name.
         for node in ast.walk(self.tree):
             if id(node) in self.annotation_nodes:
@@ -674,6 +675,13 @@ class AllowlistRenamer(ArgumentRenamer):
                     flow = self.attribute_flow
                     receiver = flow.value(node.value)
                     flow_owners = set(receiver.owners)
+                    if not flow_owners:
+                        if node.attr not in member_families:
+                            member_families[node.attr] = {
+                                owner for owner in self.classes if self.member(owner, node.attr) in watched
+                            }
+                        if flow.unrelated(node.value, member_families[node.attr]):
+                            continue
                     members = {self.member(owner, node.attr) for owner in flow_owners}
                     if receiver.unknown or not members or None in members:
                         raise ValueError(f"Unresolved receiver for allowlisted attribute {flow.describe(node)}")

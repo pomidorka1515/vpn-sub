@@ -4,15 +4,17 @@ import ast
 import builtins
 import inspect
 import re
+import typing
 from abc import ABCMeta
 from importlib import import_module
 from textwrap import dedent
 from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, UnionType
-from typing import TYPE_CHECKING, cast, get_args, get_origin
+from typing import TYPE_CHECKING, cast, get_args, get_origin, is_typeddict
 
 from ..annotations import TypeHint, merge_hints
 
 if TYPE_CHECKING:
+    from ..analysis import Binding
     from .allowlist import AllowlistRenamer
 
 __all__: list[str] = []
@@ -23,8 +25,9 @@ class ExternalReturns:
 
     def __init__(self, analysis: AllowlistRenamer) -> None:
         self.analysis: AllowlistRenamer = analysis
-        self.cache: dict[ast.AST, TypeHint] = {}
+        self.cache: dict[ast.expr, TypeHint] = {}
         self.annotations: dict[object, ast.expr | None] = {}
+        self.paths: dict[str, TypeHint] = {}
 
     def resolve(self, path: str) -> object:
         parts = path.split(".")
@@ -89,10 +92,16 @@ class ExternalReturns:
         return self.runtime_hint(value)
 
     def runtime_hint(self, value: object) -> TypeHint:
+        if value is typing.Any:
+            return TypeHint()
         origin = get_origin(value)
         if origin is UnionType:
             arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
             return merge_hints(*arguments) if all(arguments) else TypeHint()
+        if is_typeddict(origin or value):
+            # TypedDict classes are not runtime instance types. Their values,
+            # including those returned by dict.copy(), are dictionaries.
+            return TypeHint(("builtins.dict",))
         arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
         value = origin or value
         if isinstance(value, type):
@@ -126,6 +135,10 @@ class ExternalReturns:
         return hint
 
     def method(self, receiver: TypeHint, name: str) -> TypeHint:
+        if receiver.self_reference or receiver.incomplete:
+            return TypeHint()
+        if name == "copy" and receiver.classes == ("builtins.dict",):
+            return receiver
         hints: list[TypeHint] = []
         for path in receiver.classes:
             owner = self.resolve(path)
@@ -137,19 +150,88 @@ class ExternalReturns:
     def hint(self, node: ast.expr, seen: frozenset[ast.AST] = frozenset()) -> TypeHint:
         if node in seen:
             return TypeHint()
-        if node in self.cache:
+        if not seen and node in self.cache:
             return self.cache[node]
         try:
             result = self.expression(node, seen | {node})
         except (ImportError, AttributeError, ValueError, TypeError, OSError, SyntaxError):
             result = TypeHint()
-        self.cache[node] = result
+        if not seen:
+            self.cache[node] = result
         return result
 
-    def expression(self, node: ast.expr, seen: frozenset[ast.AST]) -> TypeHint:
-        hint = self.analysis.value_hint(node)
-        if hint:
+    def normalize(self, hint: TypeHint) -> TypeHint:
+        """Expand imported alias objects without evaluating annotation expressions."""
+        if hint.incomplete:
+            return TypeHint()
+        if not hint.classes or hint.origin is not None:
             return hint
+        hints: list[TypeHint] = []
+        for path in hint.classes:
+            if path in self.analysis.annotation_classes:
+                hints.append(TypeHint((path,)))
+                continue
+            if path not in self.paths:
+                try:
+                    self.paths[path] = self.runtime_hint(self.resolve(path))
+                except (ImportError, AttributeError, ValueError):
+                    self.paths[path] = TypeHint()
+            hints.append(self.paths[path])
+        if not all(hints):
+            return TypeHint()
+        result = merge_hints(*hints)
+        return TypeHint(
+            result.classes, hint.self_reference, arguments=hint.arguments or result.arguments
+        )
+
+    def reaching_local(
+        self, node: ast.Name, binding: Binding, definitions: list[ast.AST]
+    ) -> ast.AST | None:
+        """Find the reaching definition for a straight-line local rebinding."""
+        child: ast.AST = node
+        parent = self.analysis.parents.get(child)
+        while parent is not None and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(parent, (ast.ClassDef, ast.Lambda)):
+                return None
+            child, parent = parent, self.analysis.parents.get(parent)
+        if (
+            parent is None
+            or not isinstance(child, ast.stmt)
+            or child not in parent.body
+            or binding not in self.analysis.node_bindings(parent)
+        ):
+            return None
+        if any(isinstance(ref, (ast.Global, ast.Nonlocal)) for ref in binding.references):
+            return None
+        positions = {statement: index for index, statement in enumerate(parent.body)}
+        use = positions[child]
+        reaching: dict[int, ast.AST] = {}
+        for definition in definitions:
+            if isinstance(definition, ast.arg) and self.analysis.parents.get(definition) is parent.args:
+                reaching[-1] = definition
+                continue
+            assignment = self.analysis.parents.get(definition)
+            if not (
+                isinstance(assignment, (ast.Assign, ast.AnnAssign))
+                and assignment in positions
+                and assignment.value is not None
+                and isinstance(definition, ast.Name)
+                and (
+                    assignment.targets == [definition]
+                    if isinstance(assignment, ast.Assign)
+                    else assignment.target is definition
+                )
+            ):
+                return None
+            if positions[assignment] < use:
+                reaching[positions[assignment]] = definition
+        return reaching[max(reaching)] if reaching else None
+
+    def expression(self, node: ast.expr, seen: frozenset[ast.AST]) -> TypeHint:
+        if not isinstance(node, (ast.Name, ast.IfExp)):
+            hint = self.analysis.value_hint(node)
+            if hint:
+                return self.normalize(hint)
         if isinstance(node, ast.Await):
             awaited = self.hint(node.value, seen)
             if awaited.origin == "awaitable":
@@ -171,6 +253,10 @@ class ExternalReturns:
             binding = self.analysis.bindings.get(node)
             definitions = self.analysis.definitions(binding) if binding is not None else []
             if len(definitions) > 1 and isinstance(node.ctx, ast.Load):
+                if binding is not None:
+                    reaching = self.reaching_local(node, binding, definitions)
+                    if reaching is not None:
+                        definitions = [reaching]
                 # A later, separate ``with ... as name`` does not change the
                 # receiver inside this context's body. Only use this lexical
                 # evidence when no competing store occurs anywhere in the body.
@@ -190,7 +276,11 @@ class ExternalReturns:
                     parent = self.analysis.parents.get(child)
             if len(definitions) != 1:
                 return TypeHint()
-            parent = self.analysis.parents.get(definitions[0])
+            definition = definitions[0]
+            annotation = definition.__dict__.get("type_annotation")
+            if isinstance(annotation, TypeHint):
+                return self.normalize(annotation)
+            parent = self.analysis.parents.get(definition)
             if isinstance(parent, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and parent.value is not None:
                 return self.hint(parent.value, seen)
             if isinstance(parent, ast.withitem):
