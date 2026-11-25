@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
-
 from app_runtime.tasks import TaskRegistry
 from bots.discord.admin import DiscordAdminBot
 from bots.discord.host import SharedDiscordClient

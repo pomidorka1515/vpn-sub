@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import cast
 
-import discord
 import pytest
 
+import discord
 from tests.support.discord import FakeInteraction, make_bots, modal_data
 
 

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-
 from app_runtime.offload import BoundedOffload
 from app_runtime.rate_limit import AsyncRateLimiter
 from bots.discord.admin import DiscordAdminBot

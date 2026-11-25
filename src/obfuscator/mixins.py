@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from typing import TYPE_CHECKING, Never, cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
 from .analysis import inspects_frames
+from .annotations import TypeHint, merge_hints
 from .renamers.base import ArgumentRenamer
 
 if TYPE_CHECKING:
@@ -16,6 +18,8 @@ if TYPE_CHECKING:
 __all__: list[str] = ["fold_mixins", "mark_mixin_origins"]
 
 _ROOTS: dict[str, tuple[tuple[str, str], ...]] = {
+    "api.admin": (("api.admin.routes", "AsyncApi"),),
+    "api.web": (("api.web.routes", "AsyncWebApi"),),
     "db": (("db.database", "Database"),),
     "bots.telegram": (
         ("bots.telegram.admin.bot", "TelegramAdminBot"),
@@ -26,6 +30,17 @@ _ROOTS: dict[str, tuple[tuple[str, str], ...]] = {
         ("bots.discord.public.bot", "DiscordPublicBot"),
     ),
 }
+_API_BASE: tuple[str, str] = ("api.common", "AsyncBaseApi")
+_API_DECORATORS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("api.decorators.auth", "requires_admin_auth"),
+        ("api.decorators.auth", "requires_webapi_auth"),
+        ("api.decorators.auth", "requires_no_auth"),
+        ("api.decorators.validation", "requires_fields"),
+        ("api.decorators.validation", "requires_fields_strict"),
+        ("api.decorators.validation", "requires_args"),
+    }
+)
 _HOOKS: frozenset[str] = frozenset(
     {
         "__slots__",
@@ -56,6 +71,8 @@ _HOOKS: frozenset[str] = frozenset(
 def mark_mixin_origins(tree: ast.Module, module: str) -> None:
     """Keep provenance and erased architecture syntax through cleanup/linking/renaming."""
     for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.__dict__["mixin_origin"] = (module, node.name)
         if isinstance(node, ast.ClassDef):
             node.__dict__["mixin_origin"] = (module, node.name)
             node.__dict__["mixin_raw_architecture"] = bool(
@@ -80,6 +97,10 @@ def _private(name: str) -> bool:
     return name.startswith("__") and not name.endswith("__")
 
 
+def _api_module(module: str) -> bool:
+    return module in {"api.admin", "api.web"} or module.startswith(("api.admin.", "api.web."))
+
+
 def _literal(node: ast.expr) -> bool:
     """Class data must not execute code or depend on the old class namespace."""
     if isinstance(node, ast.Constant):
@@ -98,8 +119,127 @@ def _literal(node: ast.expr) -> bool:
     )
 
 
+class _ApiArchitecture:
+    """Recognize API definition-time data and wrappers without executing them."""
+
+    def __init__(self, analysis: ArgumentRenamer, family: set[ast.ClassDef]) -> None:
+        self.analysis: ArgumentRenamer = analysis
+        self.family: set[ast.ClassDef] = family
+
+    def origin(self, node: ast.expr) -> tuple[str, str] | None:
+        target = self.analysis.target(node, instances=False)
+        if target is not None:
+            origin = target.__dict__.get("mixin_origin")
+            if isinstance(origin, tuple):
+                return cast(tuple[str, str], origin)
+        path = self.analysis.imported_path(node)
+        if path is not None and "." in path:
+            module, name = path.rsplit(".", 1)
+            return module, name
+        return None
+
+    def builtin(self, node: ast.expr, names: set[str]) -> bool:
+        return (
+            isinstance(node, ast.Name)
+            and node.id in names
+            and isinstance(cast(object, self.analysis.bindings.get(node)), BuiltinBinding)
+        )
+
+    def route_reference(self, node: ast.expr, seen: frozenset[ast.ClassDef]) -> bool:
+        if not isinstance(node, ast.Attribute) or node.attr != "ROUTES":
+            return False
+        owner = self.analysis.target(node.value, instances=False)
+        if not isinstance(owner, ast.ClassDef) or owner not in self.family or owner in seen:
+            return False
+        definitions = [
+            statement.value
+            for statement in owner.body
+            if isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and statement.targets[0].id == "ROUTES"
+        ]
+        return len(definitions) == 1 and self.routes(definitions[0], seen | {owner})
+
+    def routes(self, node: ast.expr, seen: frozenset[ast.ClassDef] = frozenset()) -> bool:
+        if not isinstance(node, ast.Tuple):
+            return False
+        for value in node.elts:
+            if isinstance(value, ast.Starred) and self.route_reference(value.value, seen):
+                continue
+            if not (
+                isinstance(value, ast.Call)
+                and self.origin(value.func) == ("api.common", "Route")
+                and all(_literal(argument) for argument in value.args)
+                and all(
+                    keyword.arg is not None and _literal(keyword.value)
+                    for keyword in value.keywords
+                )
+            ):
+                return False
+        return True
+
+    def endpoints(self, node: ast.expr) -> bool:
+        if not (
+            isinstance(node, ast.Call)
+            and self.builtin(node.func, {"frozenset"})
+            and len(node.args) == 1
+            and not node.keywords
+            and isinstance(node.args[0], ast.Set)
+        ):
+            return False
+        for value in node.args[0].elts:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                continue
+            if not (isinstance(value, ast.Starred) and isinstance(value.value, ast.GeneratorExp)):
+                return False
+            generator = value.value
+            if len(generator.generators) != 1:
+                return False
+            loop = generator.generators[0]
+            if not (
+                isinstance(loop.target, ast.Name)
+                and not loop.ifs
+                and not loop.is_async
+                and self.route_reference(loop.iter, frozenset())
+                and isinstance(generator.elt, ast.Attribute)
+                and generator.elt.attr == "handler"
+                and isinstance(generator.elt.value, ast.Name)
+                and generator.elt.value.id == loop.target.id
+            ):
+                return False
+        return True
+
+    def data(self, name: str, value: ast.expr) -> bool:
+        return (name == "ROUTES" and self.routes(value)) or (
+            name == "_NO_STORE_ENDPOINTS" and self.endpoints(value)
+        )
+
+    def decorator(self, node: ast.expr) -> bool:
+        if not isinstance(node, ast.Call):
+            return self.origin(node) in {
+                origin for origin in _API_DECORATORS if origin[0] == "api.decorators.auth"
+            }
+        return (
+            self.origin(node.func)
+            in {origin for origin in _API_DECORATORS if origin[0] == "api.decorators.validation"}
+            and not node.keywords
+            and all(
+                _literal(child)
+                or self.builtin(child, {"str", "int", "bool", "float", "list", "dict"})
+                for argument in node.args
+                for child in (argument.elts if isinstance(argument, ast.Tuple) else [argument])
+            )
+        )
+
+    def decorators(self, nodes: list[ast.expr]) -> bool:
+        return (len(nodes) == 1 and self.builtin(nodes[0], {"property"})) or (
+            bool(nodes) and all(self.decorator(node) for node in nodes)
+        )
+
+
 def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
-    """Replace the five concrete compositions with ordinary object-based classes.
+    """Fold closed feature hierarchies into their concrete compositions.
 
     Run BEFORE method/parameter renaming and allowlisting so safety analysis sees
     concrete methods and explicit, statically resolvable dispatch.
@@ -136,14 +276,22 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             _fail(node, "ambiguous linked class binding")
         names[name] = node
 
+    api_base = origins.get(_API_BASE)
+
     orders: dict[ast.ClassDef, list[ast.ClassDef]] = {}
     visiting: set[ast.ClassDef] = set()
 
     def mro(node: ast.ClassDef, package: str) -> list[ast.ClassDef]:
         module, name = _origin(node)
+        if package in {"api.admin", "api.web"} and node is api_base:
+            # Retain the shared ABC and its import-time route validation hook.
+            return [node]
         if not (module == package or module.startswith(package + ".")):
             _fail(node, "base outside its closed package")
-        if node not in roots and not name.endswith("Mixin"):
+        if node not in roots and not (
+            name.endswith("Mixin")
+            or (package in {"api.admin", "api.web"} and name.endswith("Routes"))
+        ):
             _fail(node, "base is not a feature mixin")
         if node in visiting:
             _fail(node, "inheritance cycle")
@@ -164,6 +312,8 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             ancestor = names[base.id]
             if ancestor in roots:
                 _fail(node, "composition roots cannot inherit from one another")
+            if ancestor is api_base and node not in roots:
+                _fail(node, "only API composition roots may inherit AsyncBaseApi")
             direct.append(ancestor)
         if len(set(direct)) != len(direct):
             _fail(node, "duplicate base")
@@ -195,6 +345,14 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
         if not root.bases:
             _fail(root, "composition root no longer has mixins")
         mro(root, package)
+        if package in {"api.admin", "api.web"} and (
+            api_base is None
+            or orders[root][-1] is not api_base
+            or not any(
+                isinstance(base, ast.Name) and names.get(base.id) is api_base for base in root.bases
+            )
+        ):
+            _fail(root, "API root must directly retain AsyncBaseApi last in its C3 order")
     family = set(orders)
     mixins = family - set(roots)
     # A newly added but uncomposed mixin, or a new concrete composition, must not
@@ -206,10 +364,28 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             for package in _ROOTS
             if any(origin in expected for origin in _ROOTS[package])
         )
-        if in_package and name.endswith("Mixin") and node not in family:
+        api_group = _api_module(module) and name.endswith("Routes")
+        if in_package and (name.endswith("Mixin") or api_group) and node not in family:
             _fail(node, "unconnected mixin")
 
     analysis = ArgumentRenamer({"__main__": tree})
+    api = _ApiArchitecture(analysis, family)
+    if api_base is not None and any(api_base in orders[root] for root in roots):
+        if (
+            api_base.__dict__.get("mixin_raw_architecture")
+            or len(api_base.bases) != 1
+            or analysis.imported_path(api_base.bases[0]) != "abc.ABC"
+            or api_base.__dict__.get("mixin_base_count", 1) != 1
+            or any(
+                isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and member.name in _HOOKS - {"__init_subclass__"}
+                for member in api_base.body
+            )
+        ):
+            _fail(api_base, "unsupported shared API base architecture")
+        for root in roots:
+            if orders[root] == [root, api_base]:
+                _fail(root, "composition root no longer has mixins")
     for child in ast.walk(tree):
         if (
             isinstance(child, ast.Name)
@@ -238,6 +414,13 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                     if not isinstance(reference, (ast.Name, ast.Attribute)):
                         continue
                     hierarchy_target = analysis.target(reference, instances=False)
+                    if (
+                        hierarchy_target is api_base
+                        and api_base is not None
+                        and child not in roots
+                        and any(api_base in orders[root] for root in roots)
+                    ):
+                        _fail(child, "shared API base has a consumer outside the composition roots")
                     if hierarchy_target in mixins:
                         _fail(child, "mixin has a consumer outside the composition roots")
                     if hierarchy_target in roots:
@@ -284,6 +467,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
         if owner not in family:
             continue
         selected: dict[str, tuple[str, ast.stmt]] = {}
+        is_api = _api_module(_origin(owner)[0])
         members[owner] = selected
         class_names = {
             child.name
@@ -305,7 +489,9 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 descriptor = analysis.descriptor(statement)
                 descriptors[statement] = descriptor
                 if statement.decorator_list and not (
-                    descriptor or analysis.forwarding_decorators(statement)
+                    descriptor
+                    or analysis.forwarding_decorators(statement)
+                    or (is_api and api.decorators(statement.decorator_list))
                 ):
                     _fail(owner, f"unsupported method decorator on {name}")
                 headers = [
@@ -343,7 +529,10 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 isinstance(statement, ast.Assign)
                 and len(statement.targets) == 1
                 and isinstance(statement.targets[0], ast.Name)
-                and _literal(statement.value)
+                and (
+                    _literal(statement.value)
+                    or (is_api and api.data(statement.targets[0].id, statement.value))
+                )
             ):
                 name = statement.targets[0].id
             else:
@@ -378,9 +567,15 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 # The database backup validator reads SchemaMixin.SCHEMA_VERSION.
                 # Permit direct reads of immutable data, never class identity,
                 # method extraction, mutable data, reflection, or mutation.
-                if isinstance(definition, ast.Assign) and all(
-                    not isinstance(value, (ast.List, ast.Dict, ast.Set))
-                    for value in ast.walk(definition.value)
+                if isinstance(definition, ast.Assign) and (
+                    (api.data(parent.attr, definition.value) and _api_module(_origin(owner)[0]))
+                    or (
+                        _literal(definition.value)
+                        and all(
+                            not isinstance(value, (ast.List, ast.Dict, ast.Set))
+                            for value in ast.walk(definition.value)
+                        )
+                    )
                 ):
                     data_references[parent] = slot
                     continue
@@ -429,11 +624,23 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                         (
                             members[base][attribute.attr]
                             for base in order[order.index(owner) + 1 :]
-                            if attribute.attr in members[base]
+                            if base in members and attribute.attr in members[base]
                         ),
                         None,
                     )
                     if target is None:
+                        if (
+                            api_base is not None
+                            and order[-1] is api_base
+                            and any(
+                                isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                                and member.name == attribute.attr
+                                for member in api_base.body
+                            )
+                        ):
+                            # The copied method's new class cell dispatches to
+                            # the same retained base after all features are folded.
+                            continue
                         _fail(owner, f"super target {attribute.attr} is not an internal method")
                     slot, definition = target
                     if (
@@ -443,6 +650,8 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                     ):
                         _fail(owner, "super target is not an ordinary instance method")
                     targets.add(slot)
+                if not targets:
+                    continue
                 if len(targets) != 1:
                     _fail(owner, "shared super method has consumer-dependent dispatch")
                 replacements[invocation] = (targets.pop(), receiver[0].arg)
@@ -518,8 +727,19 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             continue
         effective: dict[str, tuple[str, ast.stmt]] = {}
         for ancestor in orders[node]:
+            if ancestor is api_base:
+                continue
             for name, member in members[ancestor].items():
                 effective.setdefault(name, member)
+        # Cleanup erased the declarations, but later rename safety still needs
+        # the inherited receiver types after their declaring classes disappear.
+        field_types: dict[str, TypeHint] = {}
+        for ancestor in orders[node]:
+            inherited = ancestor.__dict__.get("field_types", {})
+            for name, hint in cast(dict[str, object], inherited).items():
+                if isinstance(hint, TypeHint):
+                    field_types[name] = merge_hints(field_types.get(name, TypeHint()), hint)
+        node.__dict__["field_types"] = field_types
         selected_names = {slot: name for name, (slot, _) in effective.items()}
         definitions = dict(effective)
         # Retain only overridden implementations reachable through super calls.
@@ -541,7 +761,11 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 selected_names[target_slot] = target_slot
                 definitions[target_slot] = member
                 pending.append(member)
-        node.bases = []
+        node.bases = [
+            base
+            for base in node.bases
+            if isinstance(base, ast.Name) and names.get(base.id) is api_base
+        ]
         node.body = []
         for name, (slot, definition) in definitions.items():
             if isinstance(definition, ast.Assign):
@@ -597,5 +821,39 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             node.body = [ast.Pass()]
         body.append(node)
     tree.body = body
+    hint_paths = {
+        path: tuple(
+            cast(str, root.__dict__["annotation_path"])
+            for root in roots
+            if mixin in orders[root] and isinstance(root.__dict__.get("annotation_path"), str)
+        )
+        for mixin in mixins
+        if isinstance(path := mixin.__dict__.get("annotation_path"), str)
+    }
+
+    def rewrite_hint(hint: TypeHint) -> TypeHint:
+        return replace(
+            hint,
+            classes=tuple(
+                dict.fromkeys(
+                    target for path in hint.classes for target in hint_paths.get(path, (path,))
+                )
+            ),
+            arguments=tuple(rewrite_hint(argument) for argument in hint.arguments),
+        )
+
+    # Helpers and nested container hints can still name erased feature classes.
+    # Represent those types by every concrete consumer, never an arbitrary root.
+    for child in ast.walk(tree):
+        for key in ("type_annotation", "return_type"):
+            hint = child.__dict__.get(key)
+            if isinstance(hint, TypeHint):
+                child.__dict__[key] = rewrite_hint(hint)
+        fields = child.__dict__.get("field_types")
+        if isinstance(fields, dict):
+            child.__dict__["field_types"] = {
+                name: rewrite_hint(hint) if isinstance(hint, TypeHint) else hint
+                for name, hint in cast(dict[str, object], fields).items()
+            }
     ast.fix_missing_locations(tree)
     return len(mixins)

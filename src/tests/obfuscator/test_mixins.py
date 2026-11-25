@@ -6,20 +6,26 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 
 import pytest
 
 pytest.importorskip("python_minifier")
 
+from obfuscator.annotations import TypeHint
 from obfuscator.linker import flatten, module_name
 from obfuscator.mixins import fold_mixins
 from obfuscator.pipeline import obfuscate_modules, prepare_tree
+from tests.support import api as api_support
 from tests.support import discord as discord_support
 from tests.support.config import config_mock, language_config, subscription_config
 from tests.support.paths import REPO_ROOT
 from tests.support.telegram import subscription_mock, telegram_mock
+
+if TYPE_CHECKING:
+    from config import Config, LangConfig
+    from db import Database
 
 __all__: list[str] = []
 
@@ -187,8 +193,7 @@ class FeatureMixin:
     assert len(result.renames) == 3
     assert result.renamed_parameters == 2
     assert any(
-        isinstance(value, type) and value.__bases__ == (object,)
-        for value in namespace.values()
+        isinstance(value, type) and value.__bases__ == (object,) for value in namespace.values()
     )
 
 
@@ -282,6 +287,88 @@ class FeatureMixin(BaseMixin):
     namespace: dict[str, Any] = {}
     exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == 10
+
+
+def test_folded_inherited_field_hints_keep_downstream_receiver_renames_safe() -> None:
+    result = obfuscate_modules(
+        _database(
+            """
+class Value:
+    def read(self, *, increment): return 7 + increment
+class BaseMixin:
+    value: object
+class FeatureMixin(BaseMixin):
+    value: Value
+    def read(self): return read_feature(self)
+def read_feature(feature: FeatureMixin):
+    return feature.value.read(increment=1)
+""",
+            """
+from .features import Value
+class Database(FeatureMixin): pass
+__classes__ = Database, Value
+""",
+        ),
+        ["f:Value:read*"],
+    )
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    database, value = namespace["__classes__"]
+    instance = database()
+    instance.value = value()
+    assert instance.read() == 8
+    assert "read" not in value.__dict__
+
+
+def test_folding_keeps_all_inherited_field_type_alternatives() -> None:
+    tree = _fold(
+        _database("""
+class First: pass
+class Second: pass
+class BaseMixin:
+    value: First
+class FeatureMixin(BaseMixin):
+    value: Second
+""")
+    )
+    root = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Database"
+    )
+    hint = root.__dict__["field_types"]["value"]
+    assert isinstance(hint, TypeHint)
+    assert hint.classes == ("db.features.Second", "db.features.First")
+
+
+def test_shared_mixin_annotation_hints_keep_all_consumers_and_container_structure() -> None:
+    tree = _fold(
+        {
+            Path("bots/telegram/common.py"): """
+class SharedMixin: pass
+def first(values: list[SharedMixin]) -> SharedMixin: return values[0]
+""",
+            Path("bots/telegram/admin/bot.py"): """
+from ..common import SharedMixin
+class TelegramAdminBot(SharedMixin): pass
+""",
+            Path("bots/telegram/public/bot.py"): """
+from ..common import SharedMixin
+class TelegramPublicBot(SharedMixin): pass
+""",
+        }
+    )
+    function = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "first"
+    )
+    result = function.__dict__["return_type"]
+    parameter = function.args.args[0].__dict__["type_annotation"]
+    assert isinstance(result, TypeHint)
+    assert isinstance(parameter, TypeHint)
+    assert result.classes == (
+        "bots.telegram.admin.bot.TelegramAdminBot",
+        "bots.telegram.public.bot.TelegramPublicBot",
+    )
+    assert parameter.origin == "sequence"
+    assert parameter.arguments == (result,)
 
 
 @pytest.mark.parametrize(
@@ -574,9 +661,18 @@ async def test_real_folded_telegram_construction_routing_and_super_shutdown(
         assert bot._close_task.done()
 
 
-def test_cli_rejects_rewritten_architecture_without_publishing_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize("family", ["db", "api"])
+def test_cli_rejects_rewritten_architecture_without_publishing_output(
+    tmp_path: Path,
+    api_sources: dict[Path, str],
+    family: str,
+) -> None:
     source, output = tmp_path / "source", tmp_path / "output"
     sources = _database("class FeatureMixin:\n    __slots__ = ()\n")
+    if family == "api":
+        sources = dict(api_sources)
+        path = Path("api/web/session.py")
+        sources[path] = sources[path].replace("@requires_webapi_auth", "@unknown")
     for path, contents in sources.items():
         destination = source / path
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -649,3 +745,263 @@ def test_unrelated_packages_are_untouched() -> None:
     before = ast.dump(tree)
     assert fold_mixins(tree, modules) == 0
     assert ast.dump(tree) == before
+
+
+@pytest.fixture(scope="module")
+def api_sources() -> dict[Path, str]:
+    return {
+        path.relative_to(REPO_ROOT / "src"): path.read_text(encoding="utf-8")
+        for path in sorted((REPO_ROOT / "src/api").rglob("*.py"))
+    }
+
+
+@pytest.mark.parametrize("package", ["admin", "web"])
+def test_real_api_folding_preserves_members_routes_and_shared_base(
+    api_sources: dict[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    package: str,
+) -> None:
+    sources = {
+        path: source
+        for path, source in api_sources.items()
+        if path.parts[1] not in {"admin", "web"} or path.parts[1] == package
+    }
+    tree, modules = _link(sources)
+    baseline = _execute(tree, monkeypatch)
+    name = "AsyncApi" if package == "admin" else "AsyncWebApi"
+    original = baseline[name]
+    expected = {
+        member: inspect.getattr_static(original, member)
+        for base in original.__mro__
+        if base.__name__ not in {"AsyncBaseApi", "ABC", "object"}
+        for member in base.__dict__
+        if (not member.startswith("__") or member == "__init__") and member != "_abc_impl"
+    }
+    assert fold_mixins(tree, modules) > 1
+    folded = _execute(tree, monkeypatch)
+    actual = folded[name]
+    assert actual.__bases__ == (folded["AsyncBaseApi"],)
+    assert actual.ROUTES == original.ROUTES
+    for member, value in expected.items():
+        result = inspect.getattr_static(actual, member)
+        if isinstance(value, staticmethod):
+            value, result = value.__func__, result.__func__
+        if isinstance(value, property):
+            value, result = value.fget, result.fget
+        if inspect.isfunction(value):
+            assert str(inspect.signature(value)) == str(inspect.signature(result)), member
+            assert result.__qualname__ == f"{name}.{member}"
+        else:
+            assert result == value, member
+    assert not any(
+        isinstance(value, type)
+        and value.__module__ == folded["__name__"]
+        and value.__name__.endswith(("Mixin", "Routes"))
+        for value in folded.values()
+    )
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ('Route("GET", "invalid", "gui_auth")', "Route path must start"),
+        ('Route("GET", "/invalid", "missing_handler")', "no such method exists"),
+        ('Route("GET", "/invalid", "gui_auth", rate_limit=0)', "rate_limit must be positive"),
+    ],
+)
+def test_folded_api_keeps_import_time_route_validation(
+    api_sources: dict[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    replacement: str,
+    message: str,
+) -> None:
+    sources = dict(api_sources)
+    path = Path("api/web/static.py")
+    sources[path] = sources[path].replace('Route("GET", "/auth", "gui_auth")', replacement)
+    with pytest.raises((ValueError, TypeError), match=message):
+        _execute(_fold(sources), monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("path", "old", "new", "message"),
+    [
+        ("api/web/routes.py", "    AsyncBaseApi,", "", "directly retain AsyncBaseApi"),
+        ("api/web/routes.py", "    AsyncAccountRoutes,", "", "unconnected mixin"),
+        (
+            "api/web/_base.py",
+            "class AsyncWebApiMixin:",
+            "class AsyncWebApiMixin(list):",
+            "unknown or external base",
+        ),
+        (
+            "api/web/session.py",
+            "    @requires_webapi_auth",
+            "    @unknown",
+            "unsupported method decorator",
+        ),
+        (
+            "api/admin/ui.py",
+            "    @property",
+            "    @unknown\n    @property",
+            "unsupported method decorator",
+        ),
+        (
+            "api/web/static.py",
+            'Route("GET", "/auth", "gui_auth")',
+            'Route("GET", dynamic(), "gui_auth")',
+            "unsupported executable class body",
+        ),
+        (
+            "api/web/static.py",
+            "route.handler for route in AsyncAccountRoutes.ROUTES",
+            "route.handler for route in unknown()",
+            "unsupported executable class body",
+        ),
+        ("api/web/static.py", '"gui_panel",', "dynamic(),", "unsupported executable class body"),
+        (
+            "api/common.py",
+            "class AsyncBaseApi(ABC):",
+            "class AsyncBaseApi(list):",
+            "unsupported shared API base",
+        ),
+        (
+            "api/web/_base.py",
+            "class AsyncWebApiMixin:",
+            "from api.common import AsyncBaseApi\nclass AsyncWebApiMixin(AsyncBaseApi):",
+            "only API composition roots",
+        ),
+        (
+            "api/web/routes.py",
+            "class AsyncWebApi(",
+            "class ExtraRoutes: pass\nclass AsyncWebApi(",
+            "unconnected mixin",
+        ),
+    ],
+)
+def test_api_folding_rejects_unknown_architecture(
+    api_sources: dict[Path, str],
+    path: str,
+    old: str,
+    new: str,
+    message: str,
+) -> None:
+    sources = dict(api_sources)
+    assert old in sources[Path(path)]
+    sources[Path(path)] = sources[Path(path)].replace(old, new)
+    with pytest.raises(ValueError, match=message):
+        _fold(sources)
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        "instance = AsyncStaticRoutes()",
+        "alias = AsyncStaticRoutes",
+        "AsyncStaticRoutes.ROUTES = ()",
+        "del AsyncStaticRoutes.ROUTES",
+        "class Other(AsyncStaticRoutes): pass",
+        "class Other(AsyncWebApi): pass",
+        "class Other(AsyncBaseApi):\n    ROUTES = ()",
+    ],
+)
+def test_api_folding_rejects_runtime_group_uses_and_extra_consumers(
+    api_sources: dict[Path, str],
+    usage: str,
+) -> None:
+    sources = dict(api_sources)
+    sources[Path("api/web/routes.py")] += "\n" + usage + "\n"
+    with pytest.raises(ValueError, match="Mixin folding"):
+        _fold(sources)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("minified", [False, True])
+async def test_real_folded_apis_http_auth_validation_permissions_and_cache_headers(
+    api_sources: dict[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    database: Database,
+    language: Config[LangConfig],
+    minified: bool,
+) -> None:
+    tree = (
+        ast.parse(obfuscate_modules(api_sources, ["f:AsyncApi:_auth_update_root:patch"]).source)
+        if minified
+        else _fold(api_sources)
+    )
+    namespace = _execute(tree, monkeypatch)
+    monkeypatch.setattr(api_support, "create_api_application", namespace["create_api_application"])
+    async with api_support.api_app() as app:
+        sub = await api_support.make_subscription(database, app=app, lang_cfg=language)
+        cfg = api_support.config_snapshot(
+            subscription_config(
+                api_uri="api",
+                api_token="secret",
+                api_admin_ui_auth=["admin", "panel-secret"],
+            )
+        )
+        kwargs = {
+            "app": app,
+            "cfg": cfg,
+            "sub": sub,
+            "bw": api_support.make_watch(database, sub),
+            "limiter": app.extensions["limiter"],
+        }
+        admin = namespace["AsyncApi"](audit_cfg=api_support.Audit(), **kwargs)
+        public = namespace["AsyncWebApi"](**kwargs)
+        assert app.extensions["frontend_web_api"] is public
+        for api in (admin, public):
+            assert all(callable(getattr(api, route.handler)) for route in api.ROUTES)
+        client = app.test_client()
+        root = {"Authorization": "secret"}
+        prefix = "/sub/api/api"
+        assert (await client.get(prefix + "/user/list")).status_code == 401
+        assert (await client.get(prefix + "/user/list", headers=root)).status_code == 200
+        invalid = await client.post(prefix + "/user/add", headers=root, json={"user": 1})
+        assert invalid.status_code == 400
+        assert invalid.headers["Cache-Control"] == "no-store"
+        created = await client.post(
+            prefix + "/auth/create",
+            headers=root,
+            json={
+                "kind": "tokens",
+                "name": "reader",
+                "permissions": ["user.read"],
+            },
+        )
+        assert created.status_code == 201
+        headers = {"Authorization": "Bearer " + (await created.get_json())["obj"]["token"]}
+        assert (await client.get(prefix + "/user/list", headers=headers)).status_code == 200
+        assert (await client.get(prefix + "/logs/audit", headers=headers)).status_code == 403
+        login = await client.post(
+            "/sub/admin/session", json={"username": "admin", "password": "panel-secret"}
+        )
+        assert login.status_code == 200
+        token = await client.get("/sub/admin/token")
+        assert token.status_code == 200
+        assert (await token.get_json())["obj"]["permissions"] == ["*"]
+        denied = await client.get("/sub/webapi/stats")
+        assert denied.status_code == 401
+        assert denied.headers["Cache-Control"] == "no-store"
+        bad_login = await client.post("/sub/webapi/login", json={"username": 1, "password": "x"})
+        assert bad_login.status_code == 400
+        assert bad_login.headers["Cache-Control"] == "no-store"
+        page = await client.get("/sub/auth")
+        assert page.status_code == 200
+        assert page.headers["Cache-Control"] == "no-store"
+        missing = await client.get(
+            "/sub/reset?token=invalid", headers={"User-Agent": "Firefox/120.0"}
+        )
+        assert missing.status_code == 404
+        assert missing.mimetype == "text/html"
+        assert missing.headers["Cache-Control"] == "no-store"
+        await database.create_user(
+            username="alice", uuid="uuid", token="a" * 40, fingerprint="chrome", displayname="Alice"
+        )
+        await database.set_auth_token("alice", "a" * 100)
+        client.set_cookie("localhost", "auth_token", "a" * 100)
+        stats = await client.get("/sub/webapi/stats")
+        assert stats.status_code == 200
+        assert stats.headers["Cache-Control"] == "no-store"
+        register = await client.post("/sub/webapi/register", json={})
+        assert register.status_code == 403
+        await admin.live_state.close()

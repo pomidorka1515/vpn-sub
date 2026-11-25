@@ -188,28 +188,47 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 
 ### Release mixin architecture contract
 
-**Do not rewrite the Discord, Telegram, or database mixin architecture without
+**Do not rewrite the Discord, Telegram, database, or API mixin architecture without
 updating `src/obfuscator/mixins.py` and its regression tests in the same change.**
-Keep the five composition roots (`DiscordAdminBot`, `DiscordPublicBot`,
-`TelegramAdminBot`, `TelegramPublicBot`, and `Database`) in their current modules.
+Keep the seven composition roots (`DiscordAdminBot`, `DiscordPublicBot`,
+`TelegramAdminBot`, `TelegramPublicBot`, `Database`, `AsyncApi`, and `AsyncWebApi`)
+in their current modules.
 Development retains the mixins; the release pipeline automatically folds each
-root's complete, package-local `*Mixin` hierarchy into one object-based class.
+root's complete, package-local `*Mixin` hierarchy into its concrete class.
+The bot and database roots become object-based classes. API roots additionally fold
+their package-local `*Routes` groups and retain `api.common.AsyncBaseApi` as their
+only base, preserving its ABC metaclass, import-time route validation, constructor,
+and route registration. That base must remain a direct base last in the original C3
+order; other external or cross-package bases still fail the build.
 New feature mixins, nested mixin inheritance, ordinary methods, and literal class
 data can be added normally: compose new mixins into the existing roots. There is
 no fixed list of mixin names or methods to maintain.
 
-These are closed hierarchies, not runtime extension points. Do not instantiate
+The feature hierarchies are closed, not runtime extension points. Do not instantiate
 mixins, use them as runtime values, monkey-patch the hierarchy, or add other
 consumers/subclasses of the mixins or roots. Direct immutable mixin-constant reads
 (such as the backup validator's schema version) are supported. Class decorators/metaclasses,
 external/dynamic/generic bases, name-mangled private members, class cells,
 architecture hooks such as `__slots__`/`__init_subclass__`, hierarchy/namespace
 reflection, arbitrary executable class bodies, class-local method defaults, and
-unknown method decorators are
-unsupported and fail the release build. Supported method decorators are builtin
-`staticmethod`/`classmethod` and stdlib context managers. Ordinary direct
+unknown method decorators are unsupported and fail the release build.
+Supported method decorators are builtin
+`staticmethod`/`classmethod` and stdlib context managers. API methods also support
+builtin getter-only `property`, the existing `api.decorators.auth` authentication
+wrappers, and `api.decorators.validation` factories with literal field arguments
+and builtin field types. API class data additionally supports tuples of literal
+`Route(...)` declarations, starred references to other folded route tables, and
+the public API's `frozenset` of literal endpoint names and route-handler generators.
+These immutable table/set reads are captured at their original definition sites,
+including reads outside the hierarchy such as application page classification.
+Other executable class data and uncomposed route groups fail the build. Ordinary direct
 `super().method(...)` calls are resolved against the original C3 order; missing,
-dynamic, or consumer-dependent targets fail rather than being guessed.
+dynamic, or consumer-dependent targets fail rather than being guessed. API calls
+whose target is in the retained shared base keep normal `super()` dispatch.
+Inherited field-type metadata follows the original C3 order onto concrete roots,
+retaining every type alternative for later rename safety checks. Annotation hints
+that name erased feature classes refer to all their concrete consumers, including
+inside container and return types.
 
 The folder emits real method definitions inside each concrete class, without
 assigning function `__name__` or `__qualname__` strings. Defaults, decorator
@@ -456,11 +475,11 @@ distinct internal aliases. The CLI always prints the warning
 remains enabled.
 Mixin folding runs before method/parameter renaming and the allowlist, so safety
 analysis sees real concrete methods, including lowered `super()` dispatch.
-For the five folded roots, selectors use the concrete class rather than the
+For the seven folded roots, selectors use the concrete class rather than the
 declaring mixin: `f:Database:create_user` renames the method, while
 `f:Database:create_user*` also selects its regular parameters. A shared mixin
 method copied into two roots is selected independently on each concrete class.
-Former mixin-scoped selectors for these hierarchies must be updated; mixin
+Former mixin- or route-group-scoped selectors for these hierarchies must be updated; mixin
 classes no longer exist at this stage. Other hierarchies retain their existing
 lexical selectors. Only flattened release output is changed; checkout imports
 and source classes are untouched.

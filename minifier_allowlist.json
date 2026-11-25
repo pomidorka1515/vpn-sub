@@ -19,7 +19,7 @@
 	"f:requires_fields_strict", "f:requires_fields_strict:decorator", "f:requires_fields_strict:decorator:wrapper",
 	"f:requires_args", "f:requires_args:decorator", "f:requires_args:decorator:wrapper",
 	"f:settle", "f:_identity", "c:AdminIdentity",
-	"f:Database:_admin_revision_matches", "f:public_identity", "f:AsyncAuthRoutes:_auth_update_root:patch",
+	"f:Database:_admin_revision_matches", "f:public_identity", "f:AsyncApi:_auth_update_root:patch",
 	"f:bounded_int", "c:FileSignature", "c:CompactReturn", "f:ensure_parent_dir", "f:resolve_lockfile_path", "f:locked_file", "f:stat_signature", "f:file_signature", "f:fsync_parent_dir", "f:atomic_write_json",
 	"c:MISSING_TYPE", "f:publish_backup", "f:strip_jsonc_comments", "v:strip_jsonc_comments:result", "v:strip_jsonc_comments:index",
 	"f:strip_jsonc_trailing_commas", "v:strip_jsonc_trailing_commas:result", "v:strip_jsonc_trailing_commas:index", "v:do_backup:content", "f:make_backup_thread", "v:make_backup_thread:loop:log", "f:reject_nonfinite_constant", "f:validate_finite_numbers",

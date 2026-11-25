@@ -26,13 +26,12 @@ def strip_typing_imports(tree: ast.Module, typing_modules: set[str]) -> ast.Modu
                     for alias in node.names
                     if alias.name not in typing_modules or (alias.asname or alias.name) in used
                 ]
-        else:
-            if node.module in typing_modules:
-                node.names = [
-                    name
-                    for name in node.names
-                    if (name.asname or name.name) in used or name.name == "*"
-                ]
+        elif node.module in typing_modules:
+            node.names = [
+                name
+                for name in node.names
+                if (name.asname or name.name) in used or name.name == "*"
+            ]
 
     class RemoveEmptyImports(ReleaseCleanup):
         @override

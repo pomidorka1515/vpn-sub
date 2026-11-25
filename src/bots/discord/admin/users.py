@@ -5,7 +5,6 @@ from secrets import token_hex
 from typing import TypedDict
 
 import discord
-
 from bots.discord.composition import AdminFeatureMixin
 from bots.edit_expiry import parse_edit_expiry
 from bots.list_messages import list_messages

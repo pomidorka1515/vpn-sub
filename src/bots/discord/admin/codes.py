@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import discord
-
 from bots.discord.composition import AdminFeatureMixin
 from bots.list_messages import list_messages
 from errors import CommittedAuditError
