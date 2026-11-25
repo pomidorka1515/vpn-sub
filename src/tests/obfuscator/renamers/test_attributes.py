@@ -185,7 +185,7 @@ __result__ = item.read(), Base._value
             "class Record:\n def __setattr__(self, name, value): pass\n"
             " def setup(self): self._value = 4"
         ),
-        "class Record:\n _value = object()",
+        "class Record:\n _value = unknown_factory()",
     ],
 )
 def test_dynamic_class_attributes_are_rejected(source: str) -> None:
@@ -197,6 +197,177 @@ def test_conflicting_allowlist_kinds_are_rejected() -> None:
     tree = ast.parse("class Record:\n _value = 4\n__result__ = Record._value")
     with pytest.raises(ValueError, match="Conflicting"):
         AllowlistRenamer(tree).apply(["attr:Record:_value", "v:Record:_value"])
+
+
+@pytest.mark.parametrize("default", [
+    "object()", "set()", "{}", "[]", "(1, 2)", "WeakSet()", "threading.RLock()", "Data()",
+    "make_registry()", "make_lock()", "Defaults.VALUE",
+])
+def test_ordinary_class_data_preserves_identity_and_inheritance(default: str) -> None:
+    source = f"""
+import threading
+from weakref import WeakSet
+make_registry = WeakSet
+make_lock = threading.RLock
+class Defaults:
+    VALUE = {{'a': 1}}
+class Data: pass
+class Record:
+    _value = {default}
+    def read(self): return self._value
+    @classmethod
+    def shared(cls): return cls._value
+class Child(Record): pass
+first = Record()
+second = Child()
+__result__ = first.read() is second.read() is Record.shared() is Child._value
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] is True
+    assert "_value" not in result.source
+
+
+@pytest.mark.parametrize("definition", [
+    "def __get__(self, obj, owner): return 1",
+    "def __set__(self, obj, value): pass",
+    "def __delete__(self, obj): pass",
+    "def __set_name__(self, owner, name): self.name = name",
+    "def __new__(cls): return unknown_factory()",
+])
+def test_descriptor_and_opaque_allocator_defaults_are_rejected(definition: str) -> None:
+    source = f"class Data:\n {definition}\nclass Record:\n _value = Data()"
+    with pytest.raises(ValueError, match="descriptor"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+@pytest.mark.parametrize("factory", ["set", "WeakSet"])
+def test_internal_registry_iteration_rewrites_member_receivers(factory: str) -> None:
+    source = f"""
+from weakref import WeakSet
+class Record:
+    _instances = {factory}()
+    _value = 3
+    def __init__(self): self._instances.add(self)
+    @classmethod
+    def update(cls):
+        for item in cls._instances: item._value += 1
+first = Record()
+second = Record()
+Record.update()
+__result__ = first._value, second._value, Record._value
+"""
+    entries = ["attr:Record:_instances", "attr:Record:_value"]
+    result = obfuscate_modules({Path("main.py"): source}, entries, jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (4, 4, 3)
+    assert all(name not in result.source for name in ("_instances", "_value"))
+
+
+@pytest.mark.parametrize("usage", [
+    "unknown(record._instances)",
+    "external.registry = record._instances",
+    "external['registry'] = record._instances",
+    "record._instances.update([record])",
+    "unknown(list(record._instances))",
+    "unknown(record._instances.pop())",
+])
+def test_internal_registries_cannot_escape_to_unknown_consumers(usage: str) -> None:
+    source = f"""
+class Record:
+    _instances = set()
+    _value = 3
+    def __init__(self): self._instances.add(self)
+record = Record()
+{usage}
+"""
+    with pytest.raises(ValueError, match="Escaping"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_registry_iteration_preserves_unknown_alternatives() -> None:
+    tree = ast.parse("""
+class Record:
+    _instances = set()
+    _value = 3
+    def __init__(self): self._instances.add(self)
+record = Record()
+registry = record._instances if unknown_condition else unknown_registry
+for item in registry:
+    item._value += 1
+""")
+    with pytest.raises(ValueError, match=r"Ambiguous|Unresolved"):
+        AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
+@pytest.mark.parametrize("factory", ["dict", "WeakKeyDictionary", "OrderedDict"])
+def test_internal_mapping_keys_and_values_preserve_receiver_flow(factory: str) -> None:
+    source = f"""
+from collections import OrderedDict
+from weakref import WeakKeyDictionary
+class Record:
+    _value = 3
+class Holder:
+    def __init__(self): self.record = Record()
+cache = {factory}()
+holder = Holder()
+bucket = cache.setdefault(holder, dict())
+bucket['record'] = holder.record
+cache.get(holder)['record']._value += 1
+__result__ = cache[holder]['record']._value
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 4
+    with pytest.raises(ValueError, match="Escaping"):
+        AllowlistRenamer(ast.parse(source + "\nunknown(cache)\n")).apply(["attr:Record:_value"])
+
+
+def test_mapping_cannot_hide_a_bound_callback_escape() -> None:
+    tree = ast.parse("""
+class Record:
+    _value = 3
+    def read(self): return self._value
+record = Record()
+cache = dict()
+cache['callback'] = record.read
+unknown(cache)
+""")
+    with pytest.raises(ValueError, match="Escaping"):
+        AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
+def test_real_logger_class_attributes_preserve_runtime_behavior() -> None:
+    root = Path(__file__).resolve().parents[3]
+    modules = {
+        Path("loggers") / name: (root / "loggers" / name).read_text()
+        for name in ("__init__.py", "colors.py", "common.py", "level.py", "logger.py")
+    }
+    modules[Path("main.py")] = """
+import logging
+from loggers import Logger
+handler = logging.NullHandler()
+first = Logger('obfuscator-regression-first')
+Logger.add_shared_handler(handler)
+second = Logger('obfuscator-regression-second')
+before = handler in first.handlers and handler in second.handlers
+shared = first._instances is second._instances is Logger._instances
+Logger.remove_shared_handler(handler)
+after = handler not in first.handlers and handler not in second.handlers
+__result__ = before, shared, after, len(Logger._instances)
+logging.Logger.manager.loggerDict.pop('obfuscator-regression-first')
+logging.Logger.manager.loggerDict.pop('obfuscator-regression-second')
+"""
+    entries = [f"attr:Logger:{name}" for name in ("_instances", "_shared_handlers", "_registry_lock", "COLORS")]
+    result = obfuscate_modules(modules, entries, jobs=1)
+    assert set(entries) <= result.renames.keys()
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (True, True, True, 2)
+    assert all(name not in result.source for name in ("_instances", "_shared_handlers", "_registry_lock"))
 
 
 def test_attribute_file_qualifier_disambiguates_classes() -> None:

@@ -380,6 +380,18 @@ and `hasattr` keys follow it too. Unrelated classes retain same-spelled attribut
 Unresolved/polymorphic receivers, subclass conflicts, unverifiable external inheritance,
 descriptors, dataclasses, slots, dynamic reflection, namespace inspection, and
 unknown external consumers fail closed. Special/name-mangled attributes are unsupported.
+Class defaults can contain ordinary literal containers and statically verified
+non-descriptor instances, including `set()`, `WeakSet()`, and `threading.RLock()`;
+their construction and shared identity are preserved. Empty internal `set` and
+`WeakSet` registries track added receivers through aliases, copies, and ordinary
+`for` loops. Their fixed `add`/`discard`/`remove`/`clear` operations are supported;
+opaque consumers and unsupported operations on registries containing selected
+receivers still fail closed. Empty internal `dict`, `OrderedDict`, and
+`WeakKeyDictionary` caches track keys and values through subscript stores/reads
+and `get`/`setdefault`/`pop`, including nested caches; unknown consumers still
+reject caches containing selected receivers. Logger subclasses may register themselves in the
+standard `logging.Logger.manager.loggerDict`; inherited logging implementations
+are inspected for conflicts with the selected fields as usual.
 Receiver safety follows visible function/lambda calls through positional and keyword
 parameters, literal `**kwargs`, defaults, aliases, bound methods, callback forwarding,
 returns, and internal instance fields. Recursive call graphs are solved to a fixed

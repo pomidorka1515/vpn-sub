@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import ast
+import builtins
+import inspect
+import threading
+from _thread import RLock  # ruff: ignore[import-private-name] - Inspect the native type without constructing a lock.
 from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
@@ -13,6 +17,73 @@ if TYPE_CHECKING:
     from .allowlist import AllowlistRenamer
 
 __all__: list[str] = []
+
+
+def ordinary_data(analysis: AllowlistRenamer, value: ast.expr, seen: frozenset[ast.AST] = frozenset()) -> bool:
+    """Prove a class default cannot implement the descriptor protocol, without calling it."""
+    if value in seen:
+        return False
+    seen |= {value}
+    if isinstance(value, (ast.Constant, ast.List, ast.Tuple, ast.Set, ast.Dict)):
+        return True
+    if isinstance(value, ast.IfExp):
+        return ordinary_data(analysis, value.body, seen) and ordinary_data(analysis, value.orelse, seen)
+    if isinstance(value, (ast.Name, ast.Attribute)):
+        binding = analysis.bindings.get(value)
+        if isinstance(value, ast.Attribute):
+            owner = analysis.target(value.value, instances=False)
+            if isinstance(owner, ast.ClassDef):
+                binding = analysis.member(owner, value.attr)
+        definitions = analysis.definitions(binding) if binding is not None else []
+        if not definitions:
+            return False
+        return all(
+            isinstance(definition, ast.Name)
+            and isinstance(parent := analysis.parents.get(definition), (ast.Assign, ast.AnnAssign))
+            and parent.value is not None and ordinary_data(analysis, parent.value, seen)
+            for definition in definitions
+        )
+    if not isinstance(value, ast.Call):
+        return False
+    target = analysis.target(value.func, instances=False)
+    if isinstance(target, ast.ClassDef):
+        for base in analysis.mro(target):
+            if base.keywords or base.decorator_list or any(
+                binding.name in {"__get__", "__set__", "__delete__", "__set_name__", "__new__"}
+                for binding in analysis.node_bindings(base)
+            ):
+                return False
+            for parent in base.bases:
+                if not isinstance(analysis.target(parent, instances=False), ast.ClassDef):
+                    try:
+                        external = analysis.external_base(parent)
+                    except (ImportError, AttributeError, ValueError):
+                        return False
+                    if external is not object:
+                        return False
+        return True
+    binding = analysis.bindings.get(value.func)
+    constructor: object = None
+    if isinstance(cast(object, binding), BuiltinBinding):
+        constructor = vars(builtins).get(getattr(binding, "name", ""))
+    else:
+        try:
+            path = analysis.imported_path(value.func)
+            constructor = analysis.attribute_flow.external_returns.resolve(path) if path is not None else None
+        except (ImportError, AttributeError, ValueError):
+            return False
+    if constructor is threading.RLock:
+        constructor = RLock
+    if not isinstance(constructor, type) or type(constructor) is not type:
+        return False
+    # A custom allocator can return an arbitrary object instead of an instance
+    # of the called class. Only the inherited object allocator and known builtin
+    # value constructors establish the result type without executing code.
+    if inspect.getattr_static(constructor, "__new__") is not inspect.getattr_static(object, "__new__") and constructor not in {
+        object, list, tuple, set, frozenset, dict, str, bytes, bytearray, int, float, complex, bool, RLock,
+    }:
+        return False
+    return all(inspect.getattr_static(constructor, name, None) is None for name in ("__get__", "__set__", "__delete__", "__set_name__"))
 
 
 def plan_attributes(
@@ -73,7 +144,7 @@ def plan_attributes(
             for ref in analysis.definitions(binding):
                 parent = analysis.parents.get(ref)
                 if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
-                    if not isinstance(parent.value, ast.Constant):
+                    if not ordinary_data(analysis, parent.value):
                         raise ValueError(f"Allowlist {entry!r}: unsupported descriptor value")
         for cls in family - {owner}:
             if any(item.name == name for item in analysis.node_bindings(cls)) or (

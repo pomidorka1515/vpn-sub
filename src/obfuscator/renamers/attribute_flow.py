@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -26,6 +27,7 @@ class Value:
     owners: frozenset[ast.ClassDef] = frozenset()
     functions: frozenset[CallableValue] = frozenset()
     unknown: bool = False
+    containers: frozenset[ast.Call] = frozenset()
 
     def merge(self, other: Value) -> Value:
         if other is _BOTTOM or self is other:
@@ -33,12 +35,13 @@ class Value:
         if self is _BOTTOM:
             return other
         if (other.owners.issubset(self.owners) and other.functions.issubset(self.functions)
-                and (self.unknown or not other.unknown)):
+                and other.containers.issubset(self.containers) and (self.unknown or not other.unknown)):
             return self
         if (self.owners.issubset(other.owners) and self.functions.issubset(other.functions)
-                and (other.unknown or not self.unknown)):
+                and self.containers.issubset(other.containers) and (other.unknown or not self.unknown)):
             return other
-        return Value(self.owners | other.owners, self.functions | other.functions, self.unknown or other.unknown)
+        return Value(self.owners | other.owners, self.functions | other.functions, self.unknown or other.unknown,
+                     self.containers | other.containers)
 
 
 _BOTTOM: Value = Value()
@@ -66,6 +69,20 @@ class AttributeFlow:
         self.local_forwarders: dict[ast.FunctionDef, bool] = {}
         self.argument_bindings: dict[tuple[ast.Call, CallableValue], dict[ast.arg, ast.expr] | None] = {}
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
+        self.container_items: dict[ast.Call, Value] = {}
+        self.container_values: dict[ast.Call, Value] = {}
+        for node in self.nodes:
+            if isinstance(node, ast.Call) and not node.args and not node.keywords:
+                binding = analysis.bindings.get(node.func)
+                if (isinstance(cast(object, binding), BuiltinBinding) and getattr(binding, "name", "") == "set") or (
+                    analysis.imported_path(node.func) == "weakref.WeakSet"
+                ):
+                    self.container_items[node] = _BOTTOM
+                elif (isinstance(cast(object, binding), BuiltinBinding) and getattr(binding, "name", "") == "dict") or (
+                    analysis.imported_path(node.func) in {"weakref.WeakKeyDictionary", "collections.OrderedDict"}
+                ):
+                    self.container_items[node] = _BOTTOM
+                    self.container_values[node] = _BOTTOM
         for owner in analysis.classes:
             if (record := self.record_fields(owner)) is not None:
                 self.records[owner] = record
@@ -86,8 +103,15 @@ class AttributeFlow:
         # selected family can find all containers in a single graph walk.
         self.field_containers: dict[ast.ClassDef, set[ast.ClassDef]] = {}
         for (owner, _), field in self.fields.items():
-            for contained in field.owners:
+            for contained in self.contained_owners(field):
                 self.field_containers.setdefault(contained, set()).add(owner)
+        for owner in analysis.classes:
+            for binding in analysis.node_bindings(owner):
+                for definition in analysis.definitions(binding):
+                    parent = analysis.parents.get(definition)
+                    if isinstance(definition, ast.Name) and isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
+                        for contained in self.contained_owners(self.value(parent.value)):
+                            self.field_containers.setdefault(contained, set()).add(owner)
         self.exposed_owners: dict[frozenset[ast.ClassDef], set[ast.ClassDef]] = {}
 
     def record_fields(self, owner: ast.ClassDef) -> tuple[bool, dict[str, ast.expr | None]] | None:
@@ -181,7 +205,7 @@ class AttributeFlow:
         if cached is not None:
             return cached
         value = self.expression(node, seen)
-        if isinstance(node, ast.expr) and not value.owners and not value.functions:
+        if isinstance(node, ast.expr) and not value.owners and not value.functions and not value.containers:
             owners = self.static_receiver(node)
             if owners:
                 value = Value(owners)
@@ -214,6 +238,14 @@ class AttributeFlow:
                     parent = analysis.parents.get(definition)
                     if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
                         values.append(self.value(parent.value, seen))
+                    elif isinstance(parent, ast.For) and parent.target is definition:
+                        iterable = self.value(parent.iter, seen)
+                        if iterable.containers:
+                            values.append(self.join([self.container_items[item] for item in iterable.containers]).merge(
+                                Value(unknown=iterable.unknown or bool(iterable.owners or iterable.functions))
+                            ))
+                        else:
+                            values.append(_UNKNOWN)
                     else:
                         inferred = self.static_receiver(node)
                         values.append(Value(inferred, unknown=not inferred))
@@ -248,6 +280,13 @@ class AttributeFlow:
                 binding = analysis.member(owner, node.attr)
                 definitions = analysis.definitions(binding) if binding is not None else []
                 for definition in definitions:
+                    if isinstance(definition, ast.Name):
+                        parent = analysis.parents.get(definition)
+                        if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
+                            default = self.value(parent.value, seen)
+                            # A function assigned as class data can bind as a
+                            # descriptor. Do not infer it as an instance field.
+                            values.append(_UNKNOWN if default.functions else default)
                     if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if analysis.is_property(definition):
                             values.append(self.result(definition, seen))
@@ -274,7 +313,21 @@ class AttributeFlow:
                 # round. Bottom is pending evidence, not an opaque alternative.
                 return _BOTTOM
         if isinstance(node, ast.Call):
+            if node in self.container_items:
+                return Value(containers=frozenset({node}))
+            if isinstance(node.func, ast.Attribute) and node.func.attr in {"get", "setdefault", "pop"}:
+                receiver = self.value(node.func.value, seen)
+                if receiver.containers and receiver.containers <= self.container_values.keys():
+                    result = self.join([self.container_values[item] for item in receiver.containers])
+                    if len(node.args) == 2:
+                        result = result.merge(self.value(node.args[1], seen))
+                    return result.merge(Value(unknown=receiver.unknown or bool(receiver.owners or receiver.functions)))
             builtin = analysis.bindings.get(node.func)
+            if isinstance(cast(object, builtin), BuiltinBinding) and len(node.args) == 1 and not node.keywords:
+                if getattr(builtin, "name", "") in {"list", "tuple", "set", "frozenset", "iter"}:
+                    source = self.value(node.args[0], seen)
+                    if source.containers:
+                        return source
             if (
                 isinstance(cast(object, builtin), BuiltinBinding)
                 and getattr(builtin, "name", "") == "getattr"
@@ -297,6 +350,12 @@ class AttributeFlow:
                 return self.join(values).merge(Value(unknown=callee.unknown))
         if isinstance(node, (ast.Await, ast.NamedExpr)):
             return self.value(node.value, seen)
+        if isinstance(node, ast.Subscript):
+            receiver = self.value(node.value, seen)
+            if receiver.containers and receiver.containers <= self.container_values.keys():
+                return self.join([self.container_values[item] for item in receiver.containers]).merge(
+                    Value(unknown=receiver.unknown or bool(receiver.owners or receiver.functions))
+                )
         if isinstance(node, ast.IfExp):
             return self.value(node.body, seen).merge(self.value(node.orelse, seen))
         if isinstance(node, ast.BoolOp):
@@ -496,6 +555,10 @@ class AttributeFlow:
                 self.open_callbacks(value)
             for owner in owners:
                 self.add_field(owner, destination.attr, value)
+        elif isinstance(destination, ast.Subscript) and self.value(destination.value).containers:
+            for container in self.value(destination.value).containers:
+                if container in self.container_values:
+                    self.add_container_value(container, self.value(destination.slice), self.value(expression))
         elif (
             isinstance(destination, (ast.Tuple, ast.List))
             and isinstance(expression, (ast.Tuple, ast.List))
@@ -522,6 +585,17 @@ class AttributeFlow:
             self.values.clear()
             for node in nodes:
                 if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Attribute) and node.func.attr == "add" and len(node.args) == 1 and not node.keywords:
+                        for container in self.value(node.func.value).containers:
+                            previous = self.container_items[container]
+                            updated = previous.merge(self.value(node.args[0]))
+                            if updated is not previous:
+                                self.container_items[container] = updated
+                                self.changed = True
+                    if isinstance(node.func, ast.Attribute) and node.func.attr == "setdefault" and len(node.args) in {1, 2} and not node.keywords:
+                        for container in self.value(node.func.value).containers:
+                            if container in self.container_values:
+                                self.add_container_value(container, self.value(node.args[0]), self.value(node.args[1]) if len(node.args) == 2 else _BOTTOM)
                     builtin = self.analysis.bindings.get(node.func)
                     if (
                         isinstance(cast(object, builtin), BuiltinBinding)
@@ -566,6 +640,13 @@ class AttributeFlow:
             if not self.changed:
                 break
         self.values.clear()
+
+    def add_container_value(self, container: ast.Call, key: Value, value: Value) -> None:
+        previous_keys, previous_values = self.container_items[container], self.container_values[container]
+        keys, values = previous_keys.merge(key), previous_values.merge(value)
+        if keys is not previous_keys or values is not previous_values:
+            self.container_items[container], self.container_values[container] = keys, values
+            self.changed = True
 
     def add_field(self, owner: ast.ClassDef, name: str, value: Value) -> None:
         key = (owner, name)
@@ -644,6 +725,18 @@ class AttributeFlow:
         return True
 
     def verify_call(self, call: ast.Call, family: set[ast.ClassDef]) -> None:
+        if isinstance(call.func, ast.Attribute):
+            receiver = self.value(call.func.value)
+            if receiver.containers and not receiver.unknown and not receiver.owners and not receiver.functions:
+                if receiver.containers <= self.container_values.keys():
+                    if call.func.attr in {"get", "setdefault", "pop"} and len(call.args) in {1, 2} and not call.keywords:
+                        return  # Mapping keys dispatch hash/equality, not arbitrary attributes.
+                elif not receiver.containers & self.container_values.keys() and call.func.attr in {"add", "discard", "remove"} and len(call.args) == 1 and not call.keywords:
+                    return  # Exact set/WeakSet operations use fixed hash/equality protocols.
+                if call.func.attr == "clear" and not call.args and not call.keywords:
+                    return
+            if receiver.containers and self.exposes(receiver, family):
+                raise ValueError(f"Escaping allowlisted attribute receiver through unsupported container operation: {ast.unparse(call)!r}")
         builtin = self.analysis.bindings.get(call.func)
         if isinstance(cast(object, builtin), BuiltinBinding) and not call.keywords and (
             (getattr(builtin, "name", "") in {"dict", "list", "tuple", "set", "frozenset", "len", "iter", "bool", "type"}
@@ -708,8 +801,29 @@ class AttributeFlow:
             if self.call_arguments(call, target) is None:
                 raise ValueError(f"Escaping allowlisted attribute receiver: {self.describe(call)}; unverifiable arguments")
 
+    def contained_owners(self, value: Value) -> set[ast.ClassDef]:
+        owners = set(value.owners)
+        pending = list(value.containers)
+        seen: set[ast.Call] = set()
+        while pending:
+            container = pending.pop()
+            if container in seen:
+                continue
+            seen.add(container)
+            items = self.container_items[container]
+            items = items.merge(self.container_values.get(container, _BOTTOM))
+            for callback in items.functions:
+                owner = self.analysis.parents.get(callback.function)
+                if callback.bound and isinstance(owner, ast.ClassDef):
+                    owners.add(owner)
+                items = items.merge(self.result(callback.function, frozenset()))
+            owners.update(items.owners)
+            pending.extend(items.containers - seen)
+        return owners
+
     def exposes(self, value: Value, family: set[ast.ClassDef]) -> bool:
-        if not value.owners:
+        owners = self.contained_owners(value)
+        if not owners:
             return False
         key = frozenset(family)
         if key not in self.exposed_owners:
@@ -722,10 +836,13 @@ class AttributeFlow:
                         reachable.add(container)
                         pending.append(container)
             self.exposed_owners[key] = reachable
-        return not value.owners.isdisjoint(self.exposed_owners[key])
+        return not owners.isdisjoint(self.exposed_owners[key])
 
     def verify_storage(self, node: ast.AST, family: set[ast.ClassDef]) -> None:
-        if not isinstance(node, ast.expr) or not self.value(node).owners & family:
+        if not isinstance(node, ast.expr):
+            return
+        value = self.value(node)
+        if not value.owners & family and not (value.containers and self.exposes(value, family)):
             return
         parent = self.analysis.parents.get(node)
         if isinstance(parent, (ast.Tuple, ast.List, ast.Set, ast.Dict, ast.Yield, ast.YieldFrom)):
@@ -744,4 +861,21 @@ class AttributeFlow:
                     continue
                 if isinstance(target, ast.Attribute) and self.receivers(target.value):
                     continue
+                if isinstance(target, ast.Subscript):
+                    container = self.value(target.value)
+                    if (container.containers and container.containers <= self.container_values.keys()
+                            and not container.unknown and not container.owners and not container.functions):
+                        continue
+                if (isinstance(target, ast.Subscript)
+                        and self.analysis.imported_path(target.value) == "logging.Logger.manager.loggerDict"
+                        and value.owners and not value.unknown and not value.functions and not value.containers):
+                    # logging's registry stores Logger instances and dispatches
+                    # their inherited API. check_receiver has inspected that API
+                    # for conflicts with each selected field before reaching here.
+                    if all(any(
+                        logging.Logger in self.analysis.external_base(base).__mro__
+                        for owner in self.analysis.mro(receiver) for base in owner.bases
+                        if not isinstance(self.static_target(base), ast.ClassDef)
+                    ) for receiver in value.owners):
+                        continue
                 raise ValueError(f"Escaping allowlisted attribute receiver in unresolved storage: {ast.unparse(parent)!r}")
