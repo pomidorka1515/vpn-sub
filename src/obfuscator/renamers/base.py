@@ -33,6 +33,7 @@ class ArgumentRenamer:
     """
 
     def __init__(self, trees: dict[str, ast.Module]) -> None:
+        self.hint_cache: dict[tuple[ast.AST, frozenset[int]], TypeHint] = {}
         self.trees = trees
         self.parents: dict[ast.AST, ast.AST] = {}
         self.bindings: dict[ast.AST, Binding] = {}
@@ -47,6 +48,8 @@ class ArgumentRenamer:
         self.renamed = 0
         self.skipped: Counter[str] = Counter()
         self.annotation_nodes: set[int] = set()
+        self.annotation_classes: dict[str, ast.ClassDef] = {}
+        assignments: list[ast.Assign | ast.AnnAssign] = []
         for module, tree in trees.items():
             # Use the minifier's lexical resolver rather than text replacement:
             # closures, nonlocal, comprehensions and shadowing need real bindings.
@@ -60,6 +63,12 @@ class ArgumentRenamer:
                     self.bindings.update((ref, binding) for ref in binding.references)
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                     self.functions.append(node)
+                elif isinstance(node, ast.ClassDef):
+                    path = node.__dict__.get("annotation_path")
+                    if isinstance(path, str):
+                        self.annotation_classes[path] = node
+                elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    assignments.append(node)
                 elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                     self.strings.add(node.value)
                 elif isinstance(node, ast.Import):
@@ -84,25 +93,16 @@ class ArgumentRenamer:
         self.annotation_nodes = {
             identity for tree in trees.values() for identity in annotation_nodes(tree)
         }
-        self.annotation_classes: dict[str, ast.ClassDef] = {}
-        for tree in trees.values():
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    path = node.__dict__.get("annotation_path")
-                    if isinstance(path, str):
-                        self.annotation_classes[path] = node
         self.instance_assignments: dict[tuple[int, str], list[ast.Assign | ast.AnnAssign]] = {}
-        for tree in trees.values():
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-                    continue
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                for attribute_target in targets:
-                    owner = self.instance_attribute_owner(attribute_target)
-                    if owner is not None and isinstance(attribute_target, ast.Attribute):
+        for assignment in assignments:
+            targets = assignment.targets if isinstance(assignment, ast.Assign) else [assignment.target]
+            for target_node in targets:
+                if isinstance(target_node, ast.Attribute):
+                    owner = self.instance_attribute_owner(target_node)
+                    if owner is not None:
                         self.instance_assignments.setdefault(
-                            (id(owner), attribute_target.attr), []
-                        ).append(node)
+                            (id(owner), target_node.attr), []
+                        ).append(assignment)
 
     @staticmethod
     def node_bindings(node: ast.AST) -> list[Binding]:
@@ -128,6 +128,26 @@ class ArgumentRenamer:
             )
         ):
             return decorator.id
+        return None
+
+    def imported_path(self, node: ast.AST, seen: frozenset[int] = frozenset()) -> str | None:
+        if id(node) in seen:
+            return None
+        seen |= {id(node)}
+        if isinstance(node, ast.Attribute):
+            prefix = self.imported_path(node.value, seen)
+            return f"{prefix}.{node.attr}" if prefix else None
+        binding = self.bindings.get(node)
+        definitions = self.definitions(binding) if binding is not None else []
+        if len(definitions) != 1:
+            return None
+        definition = definitions[0]
+        if isinstance(definition, ast.alias):
+            module, name = self.imports.get(definition, ("", None))
+            return f"{module}.{name}" if name else module
+        parent = self.parents.get(definition)
+        if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
+            return self.imported_path(parent.value, seen)
         return None
 
     def dataclass_decorator(self, decorator: ast.expr) -> bool:
@@ -716,11 +736,22 @@ class ArgumentRenamer:
         """Infer the annotation-derived value type of an expression."""
         if node is None:
             return TypeHint()
-        seen = set() if seen is None else seen
-        if id(node) in seen:
+        if seen is not None and id(node) in seen:
             return TypeHint()
-        seen = set(seen)
-        seen.add(id(node))
+        # Attribute and call resolution repeatedly ask for the same hints.
+        # Include the recursion context: a result truncated by a cycle must
+        # not be reused for an independent traversal of the same expression.
+        key = (node, frozenset() if seen is None else frozenset(seen))
+        cached = self.hint_cache.get(key)
+        if cached is not None:
+            return cached
+        hint = self._value_hint(node, {*key[1], id(node)})
+        if len(self.hint_cache) >= 32768:
+            self.hint_cache.clear()
+        self.hint_cache[key] = hint
+        return hint
+
+    def _value_hint(self, node: ast.AST, seen: set[int]) -> TypeHint:
         if isinstance(node, ast.Name):
             return self.name_hint(node, seen)
         if isinstance(node, ast.Attribute):

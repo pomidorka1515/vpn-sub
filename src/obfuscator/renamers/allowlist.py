@@ -6,12 +6,14 @@ import keyword
 import sys
 from collections import deque
 from contextlib import suppress
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
 from ..analysis import inspects_frames
+from .attribute_flow import AttributeFlow
 from .attributes import plan_attributes
 from .base import ArgumentRenamer
 from .external import ExternalMembers
@@ -103,6 +105,10 @@ class AllowlistRenamer(ArgumentRenamer):
             if isinstance(owner, ast.ClassDef):
                 return owner
         return super().binding_target(binding, seen, instances=instances)
+
+    @cached_property
+    def attribute_flow(self) -> AttributeFlow:
+        return AttributeFlow(self)
 
     def external_base(
         self, node: ast.expr, seen: set[ast.AST] | None = None, *, suffix: tuple[str, ...] = (),
@@ -210,7 +216,7 @@ class AllowlistRenamer(ArgumentRenamer):
                 return binding
         return None
 
-    def receiver(self, node: ast.expr) -> tuple[set[ast.ClassDef], bool]:
+    def receiver(self, node: ast.expr, seen: set[int] | None = None) -> tuple[set[ast.ClassDef], bool]:
         """Return possible classes and whether this is a polymorphic self/cls."""
         owner: ast.AST | str | None
         if isinstance(node, ast.Name):
@@ -233,7 +239,7 @@ class AllowlistRenamer(ArgumentRenamer):
                 if isinstance(assignment, (ast.Assign, ast.AnnAssign)) and isinstance(
                     assignment.value, ast.Call
                 ):
-                    owner = super().target(assignment.value.func, instances=False)
+                    owner = super().target(assignment.value.func, seen, instances=False)
                     if isinstance(owner, ast.ClassDef):
                         if any(
                             isinstance(child, ast.FunctionDef) and child.name == "__new__"
@@ -248,9 +254,9 @@ class AllowlistRenamer(ArgumentRenamer):
                 and isinstance(cast(object, self.bindings.get(node.func)), BuiltinBinding)
                 and isinstance(node.func, ast.Name) and node.func.id == "type"
             ):
-                owners, _ = self.receiver(node.args[0])
+                owners, _ = self.receiver(node.args[0], seen)
                 return {cls for cls in self.classes if any(owner in self.mro(cls) for owner in owners)}, True
-            owner = super().target(node.func, instances=False)
+            owner = super().target(node.func, seen, instances=False)
             if isinstance(owner, ast.ClassDef):
                 if any(
                     isinstance(child, ast.FunctionDef) and child.name == "__new__"
@@ -259,14 +265,51 @@ class AllowlistRenamer(ArgumentRenamer):
                 ):
                     return set(), False
                 return {owner}, False
-        owners = super().type_targets(node)
+        owners = super().type_targets(node, seen)
         if owners:
             return owners, False
-        owner = super().target(node, instances=False)
+        owner = super().target(node, seen, instances=False)
         return ({owner}, False) if isinstance(owner, ast.ClassDef) else (set(), False)
 
-    def attribute_bindings(self, node: ast.Attribute) -> set[Binding]:
-        owners, _ = self.receiver(node.value)
+    def super_bindings(self, node: ast.Attribute) -> set[Binding] | None:
+        """Resolve zero-argument builtin super against visible receiver MROs."""
+        call = node.value
+        if not isinstance(call, ast.Call) or call.args or call.keywords:
+            return None
+        builtin = self.bindings.get(call.func)
+        if not isinstance(cast(object, builtin), BuiltinBinding) or getattr(builtin, "name", "") != "super":
+            return None
+        function: ast.AST | None = self.parents.get(call)
+        while function is not None and not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            function = self.parents.get(function)
+        owner = self.parents.get(function) if function is not None else None
+        if not isinstance(owner, ast.ClassDef) or not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return None
+        if self.descriptor(function) == "staticmethod" or not (function.args.posonlyargs or function.args.args):
+            return None
+        bindings: set[Binding] = set()
+        external: bool = False
+        for receiver in self.classes:
+            order = self.mro(receiver)
+            if owner not in order:
+                continue
+            binding = next((
+                binding for base in order[order.index(owner) + 1:]
+                for binding in self.node_bindings(base) if binding.name == node.attr
+            ), None)
+            if binding is None:
+                external = True
+            else:
+                bindings.add(binding)
+        if external and bindings:
+            raise ValueError(f"Ambiguous super attribute {ast.unparse(node)!r}")
+        return bindings
+
+    def attribute_bindings(self, node: ast.Attribute, seen: set[int] | None = None) -> set[Binding]:
+        inherited = self.super_bindings(node)
+        if inherited is not None:
+            return inherited
+        owners, _ = self.receiver(node.value, seen)
         return {
             binding for owner in owners if (binding := self.member(owner, node.attr)) is not None
         }
@@ -275,7 +318,7 @@ class AllowlistRenamer(ArgumentRenamer):
         self, node: ast.AST, seen: set[int] | None = None, *, instances: bool = True
     ) -> ast.AST | str | None:
         if isinstance(node, ast.Attribute):
-            bindings = self.attribute_bindings(node)
+            bindings = self.attribute_bindings(node, seen)
             if len(bindings) == 1:
                 return self.binding_target(next(iter(bindings)), seen or set(), instances=instances)
             return None
@@ -623,24 +666,36 @@ class AllowlistRenamer(ArgumentRenamer):
                 continue
             if isinstance(node, ast.Attribute) and node.attr in member_names:
                 targets = self.attribute_bindings(node)
+                flow_owners: set[ast.ClassDef] | None = None
+                if not targets and self.super_bindings(node) is None:
+                    # Protocols are stripped from the staging tree. Recover
+                    # concrete receivers from visible callers instead of
+                    # assuming every same-spelled member uses the selected slot.
+                    flow = self.attribute_flow
+                    receiver = flow.value(node.value)
+                    flow_owners = set(receiver.owners)
+                    members = {self.member(owner, node.attr) for owner in flow_owners}
+                    if receiver.unknown or not members or None in members:
+                        raise ValueError(f"Unresolved receiver for allowlisted attribute {flow.describe(node)}")
+                    targets = {member for member in members if member is not None}
                 affected = targets & watched
                 if affected:
                     if len(targets) != 1:
                         raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
-                    owners, _ = self.receiver(node.value)
+                    owners = self.receiver(node.value)[0] if flow_owners is None else flow_owners
                     for owner in owners:
                         self.check_receiver(owner, node.attr)
                     member_binding = next(iter(affected))
+                    if flow_owners is not None and member_binding in parameter_methods:
+                        raise ValueError(
+                            f"Unresolved receiver for allowlisted parameters of {self.attribute_flow.describe(node)}"
+                        )
                     if member_binding in parameter_methods and not isinstance(node.ctx, ast.Load):
                         raise ValueError(
                             f"Reassigned method with allowlisted parameters: {ast.unparse(node)!r}"
                         )
                     if member_binding in renamed:
                         attributes[node] = renamed[member_binding]
-                elif not targets:
-                    raise ValueError(
-                        f"Unresolved receiver for allowlisted attribute {ast.unparse(node)!r}"
-                    )
             if isinstance(node, ast.AnnAssign):
                 for reference in self.quoted_annotations(node.annotation):
                     if isinstance(reference.value, str):

@@ -8,9 +8,24 @@ import pytest
 pytest.importorskip("python_minifier")
 
 import obfuscator
+from obfuscator.pipeline import prepare_tree
+from obfuscator.renamers.base import ArgumentRenamer
 from tests.support.obfuscator import renamed_modules
 
 __all__: list[str] = []
+
+
+def test_hint_cache_keeps_recursive_and_independent_lookups_separate() -> None:
+    tree = prepare_tree("class Box: pass\nresult = (Box(),)[0]\n", "fixture.py")
+    analysis = ArgumentRenamer({"__main__": tree})
+    owner, assignment = tree.body
+    assert isinstance(owner, ast.ClassDef)
+    assert isinstance(assignment, ast.Assign)
+    expression = assignment.value
+    assert isinstance(expression, ast.Subscript)
+    assert not analysis.type_targets(expression, {id(expression.value)})
+    assert analysis.type_targets(expression) == {owner}
+    assert not analysis.type_targets(expression, {id(expression.value)})
 
 
 def test_cross_module_keywords_and_reexports() -> None:

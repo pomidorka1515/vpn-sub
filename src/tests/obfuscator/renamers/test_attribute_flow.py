@@ -100,6 +100,27 @@ def test_unverifiable_flows_fail_closed(usage: str) -> None:
         AllowlistRenamer(ast.parse(RECORD + usage)).apply(["attr:Record:_value"])
 
 
+@pytest.mark.parametrize("reaches_record", [False, True])
+def test_escape_check_handles_shared_paths_and_cycles(reaches_record: bool) -> None:
+    # Repeated paths to the same class must not multiply the work, and a cycle
+    # must not hide a receiver that is reachable through another field.
+    depth = 24
+    declarations = [f"class Layer{i}: pass\nlayer{i} = Layer{i}()" for i in range(depth)]
+    fields = [
+        f"layer{i}.left = layer{i + 1}\nlayer{i}.right = layer{i + 1}"
+        for i in range(depth - 1)
+    ]
+    source = RECORD + "\n".join([*declarations, *fields, f"layer{depth - 1}.back = layer0"])
+    if reaches_record:
+        source += f"\nlayer{depth - 1}.record = record"
+    tree = ast.parse(source + "\nexternal(layer0)\n")
+    if reaches_record:
+        with pytest.raises(ValueError, match="unresolved consumer"):
+            AllowlistRenamer(tree).apply(["attr:Record:_value"])
+    else:
+        assert "attr:Record:_value" in AllowlistRenamer(tree).apply(["attr:Record:_value"])
+
+
 def test_context_transaction_callbacks_after_linking_and_automatic_renames() -> None:
     source = """
 from typing import Self

@@ -357,6 +357,143 @@ def test_allowlist_parameter_only_rejects_unknown_method_receivers() -> None:
         )
 
 
+_SAME_NAMED_METHODS: str = """
+from typing import Protocol
+
+class Snapshot(Protocol):
+    def view(self) -> int: ...
+
+class Config:
+    def view(self) -> int: return 1
+
+class AsyncConfig:
+    def view(self) -> int: return 2
+
+def read_snapshot(cfg: Snapshot) -> int:
+    return cfg.view()
+"""
+
+
+@pytest.mark.parametrize("also_rename_async", [False, True])
+def test_allowlist_resolves_same_named_methods_through_distinct_callers(also_rename_async: bool) -> None:
+    source = _SAME_NAMED_METHODS + """
+def read_config(cfg: Snapshot) -> int:
+    return cfg.view()
+
+__result__ = read_config(Config()), read_snapshot(AsyncConfig())
+"""
+    entries = ["f:Config:view"]
+    if also_rename_async:
+        entries.append("f:AsyncConfig:view")
+    result = obfuscate_modules({Path("main.py"): source}, entries, jobs=1)
+    assert set(result.renames) == set(entries)
+    assert len(set(result.renames.values())) == len(entries)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (1, 2)
+    assert sum(
+        isinstance(node, ast.FunctionDef) and node.name == "view"
+        for node in ast.walk(ast.parse(result.source))
+    ) == (0 if also_rename_async else 1)
+
+
+@pytest.mark.parametrize(
+    ("extra", "error"),
+    [
+        ("read_snapshot(Config())", "Ambiguous polymorphic attribute"),
+        ("opaque(read_snapshot)", "Unresolved receiver"),
+        ("read_snapshot(opaque())", "Unresolved receiver"),
+    ],
+)
+def test_allowlist_rejects_mixed_or_unknown_method_receiver_flow(extra: str, error: str) -> None:
+    source = _SAME_NAMED_METHODS + f"\nread_snapshot(AsyncConfig())\n{extra}\n"
+    with pytest.raises(ValueError, match=error):
+        obfuscate_modules({Path("main.py"): source}, ["f:Config:view"], jobs=1)
+
+
+@pytest.mark.parametrize("factory", ["AsyncConfig()", "opaque()"])
+def test_allowlist_traces_protocol_receivers_through_dataclass_fields(factory: str) -> None:
+    source = _SAME_NAMED_METHODS + f"""
+from dataclasses import dataclass
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Resources:
+    lang_cfg: Snapshot
+
+class Subscription:
+    def __init__(self, lang_cfg: Snapshot):
+        self.res = Resources(lang_cfg=lang_cfg)
+
+class BaseRoutes:
+    def __init__(self, sub):
+        self.sub, self.enabled = sub, True
+
+class Routes(BaseRoutes):
+    def __init__(self, sub):
+        super().__init__(sub)
+
+def handler(extension):
+    routes: Routes | None = extension.get('routes')
+    if routes is not None:
+        return read_snapshot(routes.sub.res.lang_cfg)
+
+routes = Routes(Subscription({factory}))
+__result__ = Config().view(), handler({{'routes': routes}})
+"""
+    originals = {Path("main.py"): source}
+    if factory == "opaque()":
+        with pytest.raises(ValueError, match="Unresolved receiver"):
+            obfuscate_modules(originals, ["f:Config:view"], jobs=1)
+        return
+    result = obfuscate_modules(originals, ["f:Config:view"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (1, 2)
+
+
+@pytest.mark.parametrize("changes_receiver", [False, True])
+def test_allowlist_traces_verified_local_wrappers(changes_receiver: bool) -> None:
+    forwarded = "function(Config(), **kwargs)" if changes_receiver else "function(*args, **kwargs)"
+    source = _SAME_NAMED_METHODS + f"""
+from functools import wraps
+from inspect import signature
+
+def decorate(function):
+    sig = signature(function)
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        sig.bind(*args, **kwargs)
+        return {forwarded}
+    return wrapped
+
+def compose(function):
+    delegate = decorate(function)
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        return delegate(*args, **kwargs)
+    return wrapped
+
+class Service:
+    def __init__(self, cfg: Snapshot):
+        self.cfg = cfg
+
+    @compose
+    def read(self):
+        return self.cfg.view()
+
+__result__ = Config().view(), Service(AsyncConfig()).read(), read_snapshot(AsyncConfig())
+"""
+    originals = {Path("main.py"): source}
+    if changes_receiver:
+        with pytest.raises(ValueError, match="Unresolved receiver"):
+            obfuscate_modules(originals, ["f:Config:view"], jobs=1)
+        return
+    result = obfuscate_modules(originals, ["f:Config:view"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (1, 2, 2)
+
+
 def test_allowlist_resolves_annotated_chained_receivers() -> None:
     source = """
 class Database:

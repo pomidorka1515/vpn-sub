@@ -117,6 +117,18 @@ class PrivateMethodRenamer(ArgumentRenamer):
         self.renamed = 0
         _, _, reflected = self.analyze_calls()
         references: dict[Function, list[ast.Attribute]] = {}
+        candidates = [
+            function
+            for function in self.functions
+            if not isinstance(function, ast.Lambda)
+            and not function.__dict__.get("no_rename")
+            and function.name.startswith("_")
+            and not function.name.startswith("__")
+            and function not in reflected
+            and not self.is_property(function)
+            and isinstance(self.parents.get(function), ast.ClassDef)
+        ]
+        names = {function.name for function in candidates}
         # Reserve attributes too: a new method must never shadow instance data,
         # another class member, or an attribute queried by its literal name.
         self.used.update(self.strings)
@@ -127,6 +139,8 @@ class PrivateMethodRenamer(ArgumentRenamer):
                 self.used.update(binding.name for binding in self.node_bindings(node))
                 if isinstance(node, ast.Attribute):
                     self.used.add(node.attr)
+                    if node.attr not in names:
+                        continue
                     target = self.target(node)
                     if isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         references.setdefault(target, []).append(node)
@@ -135,17 +149,7 @@ class PrivateMethodRenamer(ArgumentRenamer):
                 elif isinstance(node, ast.arg):
                     self.used.add(node.arg)
         # Resolve every attribute before changing any definition or binding.
-        for function in self.functions:
-            if (
-                isinstance(function, ast.Lambda)
-                or function.__dict__.get("no_rename")
-                or not function.name.startswith("_")
-                or function.name.startswith("__")
-                or function in reflected
-                or self.is_property(function)
-                or not isinstance(self.parents.get(function), ast.ClassDef)
-            ):
-                continue
+        for function in candidates:
             binding = self.bindings.get(function)
             if binding is None or self.definitions(binding) != [function]:
                 continue

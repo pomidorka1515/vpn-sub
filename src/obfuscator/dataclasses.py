@@ -27,26 +27,6 @@ class _Dataclasses(ArgumentRenamer):
         self.named: set[ast.ClassDef] = set()
         self.dependencies: dict[ast.ClassDef, set[ast.ClassDef]] = {}
 
-    def imported_path(self, node: ast.AST, seen: frozenset[int] = frozenset()) -> str | None:
-        if id(node) in seen:
-            return None
-        seen |= {id(node)}
-        if isinstance(node, ast.Attribute):
-            prefix = self.imported_path(node.value, seen)
-            return f"{prefix}.{node.attr}" if prefix else None
-        binding = self.bindings.get(node)
-        definitions = self.definitions(binding) if binding is not None else []
-        if len(definitions) != 1:
-            return None
-        definition = definitions[0]
-        if isinstance(definition, ast.alias):
-            module, name = self.imports.get(definition, ("", None))
-            return f"{module}.{name}" if name else module
-        parent = self.parents.get(definition)
-        if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
-            return self.imported_path(parent.value, seen)
-        return None
-
     def hint_classes(self, hint: TypeHint, owner: ast.ClassDef | None = None) -> set[ast.ClassDef]:
         result = self.hint_types(hint, owner)
         for argument in hint.arguments:
@@ -291,16 +271,18 @@ class _Dataclasses(ArgumentRenamer):
         }
         calls: dict[ast.ClassDef, list[ast.Call]] = {owner: [] for owner in self.records}
         attributes: dict[tuple[ast.ClassDef, str], list[ast.Attribute]] = {}
+        field_owners: dict[str, list[ast.ClassDef]] = {}
+        for owner, members in fields.items():
+            for name in members:
+                field_owners.setdefault(name, []).append(owner)
         for node in self.nodes:
             self.used.update(binding.name for binding in self.node_bindings(node))
             if isinstance(node, ast.Attribute):
                 self.used.add(node.attr)
-                if id(node) in self.annotation_nodes:
+                if id(node) in self.annotation_nodes or node.attr not in field_owners:
                     continue
                 owners = self.type_targets(node.value)
-                for owner, members in fields.items():
-                    if node.attr not in members:
-                        continue
+                for owner in field_owners[node.attr]:
                     if owners != {owner}:
                         # Unknown and union receivers must never be rewritten by spelling.
                         self.named.add(owner)

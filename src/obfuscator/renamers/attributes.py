@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, cast
 from python_minifier.rename.binding import BuiltinBinding
 
 from ..analysis import inspects_frames
-from .attribute_flow import AttributeFlow
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -27,7 +26,7 @@ def plan_attributes(
     nodes = list(ast.walk(analysis.tree))
     if inspects_frames(analysis.tree) or getattr(analysis.tree, "tainted", False):
         raise ValueError("Cannot rename attributes in a reflective namespace")
-    flow = AttributeFlow(analysis)
+    flow = analysis.attribute_flow
     analysis.used.update(analysis.strings)
     for node in nodes:
         analysis.used.update(binding.name for binding in analysis.node_bindings(node))
@@ -36,6 +35,7 @@ def plan_attributes(
         elif isinstance(node, ast.keyword) and node.arg is not None:
             analysis.used.add(node.arg)
     selected: dict[tuple[ast.ClassDef, str], str] = {}
+    verified_families: set[ast.ClassDef] = set()
     for entry in entries:
         _, *path, name = entry.split(":")
         source = path.pop(0) if path[0].endswith(".py") else None
@@ -80,10 +80,14 @@ def plan_attributes(
             ) in analysis.instance_assignments:
                 raise ValueError(f"Allowlist {entry!r}: conflicting subclass attribute")
         references: list[ast.Attribute | ast.Constant] = []
+        # Escape checks depend on the receiver family, not the selected field.
+        # Several fields of the same class can share that whole-tree check.
+        verify_family = owner not in verified_families
         for node in nodes:
             if id(node) in analysis.annotation_nodes:
                 continue
-            flow.verify_storage(node, family)
+            if verify_family:
+                flow.verify_storage(node, family)
             if isinstance(node, ast.Attribute) and node.attr == name:
                 receivers = flow.receivers(node.value)
                 if not receivers and not flow.unrelated(node.value, family):
@@ -123,7 +127,9 @@ def plan_attributes(
                 ):
                     raise ValueError(f"Unresolved reflective attribute receiver: {ast.unparse(node)!r}")
                 continue
-            flow.verify_call(node, family)
+            if verify_family:
+                flow.verify_call(node, family)
+        verified_families.add(owner)
         if binding is None and not references:
             raise ValueError(f"Allowlist {entry!r}: attribute target not found")
         identity = (owner, name)
