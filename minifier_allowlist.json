@@ -58,5 +58,10 @@
 	"f:db/backup.py:instance_backup_dir", "f:db/backup.py:prune_backups", "f:db/backup.py:do_backup",
 	"f:config/backup.py:instance_backup_dir", "f:config/backup.py:prune_backups", "f:config/backup.py:do_backup",
 	"attr:Logger:_instances", "attr:Logger:_shared_handlers", "attr:Logger:_registry_lock", "f:Logger:_make_formatter",
-	"f:Connection:execute*", "f:Connection:_execute*", "f:Connection:executemany*", "f:Connection:_executemany*", "f:Connection:rows*", "f:Connection:_rows*", "f:Connection:row*", "f:Connection:_row*"
+	"f:Connection:execute*", "f:Connection:_execute*", "f:Connection:executemany*", "f:Connection:_executemany*", "f:Connection:rows*", "f:Connection:_rows*", "f:Connection:row*", "f:Connection:_row*",
+	"f:LiveState:stream", "f:LiveState:close", "attr:LiveState:sample", "attr:LiveState:queues", "attr:LiveState:task", "a:LiveState:__init__:sample",
+	"c:SysUtil", "attr:SysUtil:_cpu_lock", "attr:SysUtil:_cpu_prev", "f:SysUtil:cpu*", "f:SysUtil:cpu_since_last", "f:SysUtil:cpu_info", "f:SysUtil:loadavg", "f:SysUtil:process_count", "f:SysUtil:network", "f:SysUtil:uptime", "f:SysUtil:memory", "f:SysUtil:ipaddr", "f:SysUtil:connections", "f:SysUtil:app_memory", "f:SysUtil:app_uptime", "f:SysUtil:app_thread_amount", "f:SysUtil:app_threads", "f:SysUtil:health", "f:SysUtil:app_gc_stats", "f:SysUtil:full_info", "f:SysUtil:polling_info",
+
+	"f:AsyncApi:__init__*", "attr:AsyncApi:log", "attr:AsyncApi:token", "attr:AsyncApi:ui_session_key", "attr:AsyncApi:audit_cfg", "attr:AsyncApi:live_state", "f:AsyncApi:_root_identity*", "f:AsyncApi:_auth_save*", "f:AsyncApi:_auth_update_root*", "f:AsyncApi:_audit_auth*", "f:AsyncApi:_polling_sample", "f:AsyncApi:polling_status:authorized_stream", "f:AsyncApi:_polling_sample", "f:AsyncApi:_admin_no_store*", "f:AsyncApi:_admin_asset*", "f:AsyncApi:_admin_prefix", "f:AsyncApi:_admin_login_path", "f:AsyncApi:_admin_cookie_path", "f:AsyncApi:_admin_credentials_ok*", "f:AsyncApi:_set_cookie_permissions*"
+	
 ]
