@@ -86,6 +86,31 @@ def ordinary_data(analysis: AllowlistRenamer, value: ast.expr, seen: frozenset[a
     return all(inspect.getattr_static(constructor, name, None) is None for name in ("__get__", "__set__", "__delete__", "__set_name__"))
 
 
+def attribute_owners(
+    analysis: AllowlistRenamer, entries: list[str],
+) -> list[tuple[str, ast.ClassDef, str]]:
+    """Resolve class selectors before constructing the whole-program flow graph."""
+    result: list[tuple[str, ast.ClassDef, str]] = []
+    if not entries:
+        return result
+    owners_by_path: dict[tuple[str, ...], list[ast.ClassDef]] = {}
+    for owner in analysis.classes:
+        owner_path = analysis.path(owner)
+        owners_by_path.setdefault(owner_path, []).append(owner)
+        source = owner.__dict__.get("original_file")
+        if isinstance(source, str):
+            owners_by_path.setdefault((source, *owner_path), []).append(owner)
+    for entry in entries:
+        _, *path, name = entry.split(":")
+        owners = owners_by_path.get(tuple(path), [])
+        if len(owners) != 1:
+            raise ValueError(f"Allowlist {entry!r}: {'ambiguous target' if owners else 'target not found'}")
+        if name.startswith("__"):
+            raise ValueError(f"Allowlist {entry!r}: special/name-mangled attributes are unsupported")
+        result.append((entry, owners[0], name))
+    return result
+
+
 def plan_attributes(
     analysis: AllowlistRenamer, entries: list[str]
 ) -> tuple[dict[ast.Attribute | ast.Constant, str], dict[Binding, str], dict[str, str]]:
@@ -95,6 +120,7 @@ def plan_attributes(
     report: dict[str, str] = {}
     if not entries:
         return changes, bindings, report
+    targets = attribute_owners(analysis, entries)
     nodes = analysis.nodes
     if inspects_frames(nodes) or getattr(analysis.tree, "tainted", False):
         raise ValueError("Cannot rename attributes in a reflective namespace")
@@ -108,19 +134,7 @@ def plan_attributes(
             analysis.used.add(node.arg)
     selected: dict[tuple[ast.ClassDef, str], str] = {}
     verified_families: set[ast.ClassDef] = set()
-    for entry in entries:
-        _, *path, name = entry.split(":")
-        source = path.pop(0) if path[0].endswith(".py") else None
-        owners = [
-            owner for owner in analysis.classes
-            if analysis.path(owner) == tuple(path)
-            and (source is None or owner.__dict__.get("original_file") == source)
-        ]
-        if len(owners) != 1:
-            raise ValueError(f"Allowlist {entry!r}: {'ambiguous target' if owners else 'target not found'}")
-        owner = owners[0]
-        if name.startswith("__"):
-            raise ValueError(f"Allowlist {entry!r}: special/name-mangled attributes are unsupported")
+    for entry, owner, name in targets:
         family = {cls for cls in analysis.classes if owner in analysis.mro(cls)}
         for cls in family | set(analysis.mro(owner)):
             analysis.check_receiver(cls, name)

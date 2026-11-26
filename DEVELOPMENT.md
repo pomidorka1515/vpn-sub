@@ -550,8 +550,19 @@ the standalone single-module API retains potentially external entry points.
 
 The allowlist is applied after linking and the automatic private-class,
 private-method and parameter passes, before python-minifier. It supplements
-those systems rather than replacing them, even when nonempty. Python-minifier
-still shortens eligible globals, import aliases and locals afterward. After packing
+those systems rather than replacing them, even when nonempty. A non-mutating
+preflight after dead-code elimination checks lexical selectors, definite escaping
+function parameters (including lexical aliases), and dynamic keyword expansions
+before dataclass and automatic-renaming analysis. Attribute class selectors are
+also resolved before building the receiver-flow graph. Checks that depend on
+later transformations remain at the original allowlist stage, preserving generated
+names, skip warnings, and output. Inheritance/member lookups are cached within
+each analysis pass and invalidated before the parameter pass after method renames.
+Dead-code analysis shares receiver classifications and escape checks across new
+methods of the same inherited class, while checking inherited conflicts separately
+for each method. Its external annotation lookups do not construct the attribute-flow
+graph. Python-minifier still shortens eligible globals, import aliases
+and locals afterward. After packing
 and the tracked rename passes, a pre-minifier pass evaluates short module-level
 string, integer, and float constants, substitutes their literal values at lexical
 references, and deletes their assignments. The value's text must be strictly

@@ -15,7 +15,7 @@ from python_minifier.rename.binding import BuiltinBinding, NameBinding
 
 from ..analysis import Binding, inspects_frames
 from .attribute_flow import AttributeFlow
-from .attributes import plan_attributes
+from .attributes import attribute_owners, plan_attributes
 from .base import ArgumentRenamer
 from .external import ExternalMembers
 
@@ -472,9 +472,10 @@ class AllowlistRenamer(ArgumentRenamer):
                 return []
         return functions
 
-    def apply(self, entries: list[str]) -> dict[str, str]:
-        if not entries:
-            return {}
+    def select(
+        self, entries: list[str], *, preflight: bool = False,
+    ) -> dict[Binding, tuple[str, str, ast.AST]]:
+        """Resolve original selectors without allocating names or changing the AST."""
         dead_symbols: list[tuple[str, tuple[str, ...], str | None]] = self.tree.__dict__.get(
             "dead_symbols", []
         )
@@ -483,11 +484,6 @@ class AllowlistRenamer(ArgumentRenamer):
             dead_targets.setdefault(path, []).append(actual)
             if source is not None:
                 dead_targets.setdefault((source, *path), []).append(actual)
-        attribute_entries = [entry for entry in entries if entry.startswith("attr:")]
-        entries = [entry for entry in entries if not entry.startswith("attr:")]
-        attribute_plan, attribute_bindings, attribute_renames = plan_attributes(
-            self, attribute_entries
-        )
         candidates: dict[tuple[str, ...], list[tuple[str, Binding, ast.AST]]] = {}
         for scope in self.nodes:
             for binding in self.node_bindings(scope):
@@ -582,7 +578,8 @@ class AllowlistRenamer(ArgumentRenamer):
                     raise ValueError(
                         f"Allowlist {entry!r}: incorrect type; target requires {removed_matches[0]!r}"
                     )
-                print(f"Warning: skipping allowlist {entry!r}: dead code removed", file=sys.stderr)
+                if not preflight:
+                    print(f"Warning: skipping allowlist {entry!r}: dead code removed", file=sys.stderr)
                 continue
             if len(matches) != 1:
                 message: str = (
@@ -625,11 +622,12 @@ class AllowlistRenamer(ArgumentRenamer):
                     + function.args.kwonlyargs
                 )
             ):
-                print(
-                    f"Warning: skipping allowlist {entry!r}: overlaps with a no_rename"
-                    " or no_rename_arg decorator; rule ignored",
-                    file=sys.stderr,
-                )
+                if not preflight:
+                    print(
+                        f"Warning: skipping allowlist {entry!r}: overlaps with a no_rename"
+                        " or no_rename_arg decorator; rule ignored",
+                        file=sys.stderr,
+                    )
                 continue
             definitions = self.definitions(binding)
             alias_references: list[ast.Name] = cast(
@@ -669,12 +667,18 @@ class AllowlistRenamer(ArgumentRenamer):
                         queued.add(parameter_entry)
                         pending.append((parameter_entry, None))
             if kind == "f" and binding.name.startswith("__") and binding.name.endswith("__"):
-                if not expand_parameters:
+                if not expand_parameters and not preflight:
                     print(
                         f"Warning: skipping allowlist {entry!r}: dunder function names must be preserved; "
                         "use a trailing * to select only its parameters",
                         file=sys.stderr,
                     )
+                continue
+            if preflight:
+                # Dataclass and automatic renames may still change this binding.
+                # Only lexical resolution and definite parameter escapes are
+                # invariant here; leave all other safety checks to apply().
+                selected[binding] = (kind, entry, definition)
                 continue
             if kind in {"c", "f"}:
                 scope = self.parents[definition]
@@ -742,6 +746,88 @@ class AllowlistRenamer(ArgumentRenamer):
                 ):
                     self.check_receiver(owner, function.name)
             selected[binding] = (kind, entry, definition)
+        return selected
+
+    def preflight(self, entries: list[str]) -> None:
+        """Fail early on invalid selectors and lexically certain callable escapes.
+
+        Do not allocate names, print skip warnings, or speculate about receiver
+        flows that later transformations can refine. Full validation still runs
+        at the original rename point, preserving output and skip semantics.
+        """
+        attribute_owners(self, [entry for entry in entries if entry.startswith("attr:")])
+        selected = self.select(
+            [entry for entry in entries if not entry.startswith("attr:")], preflight=True,
+        )
+        functions: set[ast.FunctionDef | ast.AsyncFunctionDef] = set()
+        for kind, _, definition in selected.values():
+            if kind != "a" or not isinstance(definition, ast.arg):
+                continue
+            function = self.parents[self.parents[definition]]
+            if (
+                isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and definition not in {function.args.vararg, function.args.kwarg}
+                and not isinstance(self.parents.get(function), ast.ClassDef)
+                and (binding := self.bindings.get(function)) is not None
+                and self.definitions(binding) == [function]
+            ):
+                functions.add(function)
+        for function in functions:
+            pending_bindings = [self.bindings[function]]
+            visited: set[Binding] = set()
+            while pending_bindings:
+                binding = pending_bindings.pop()
+                if binding in visited:
+                    continue
+                visited.add(binding)
+                self.check_parameter_escapes(function, binding, pending_bindings)
+
+    def check_parameter_escapes(
+        self,
+        function: ast.FunctionDef | ast.AsyncFunctionDef,
+        binding: Binding,
+        pending: list[Binding],
+    ) -> None:
+        """Check only lexical references whose identity survives later passes."""
+        for reference in binding.references:
+            if (
+                not isinstance(reference, ast.Name)
+                or not isinstance(reference.ctx, ast.Load)
+                or id(reference) in self.annotation_nodes
+            ):
+                continue
+            parent = self.parents.get(reference)
+            if isinstance(parent, ast.Call) and parent.func is reference:
+                if any(
+                    keyword.arg is None and self.literal_keywords(keyword) is None
+                    for keyword in parent.keywords
+                ):
+                    raise ValueError(
+                        f"Dynamic **kwargs for allowlisted parameters of {ast.unparse(reference)!r}"
+                    )
+                continue
+            alias = self.alias_assignment(reference)
+            if alias is not None:
+                if (alias_binding := self.bindings.get(alias)) is not None:
+                    pending.append(alias_binding)
+                continue
+            name_only = (
+                f"f:{function.__dict__.get('original_file', '<staging>')}:"
+                f"{':'.join(self.path(function))}"
+            )
+            raise ValueError(
+                f"Escaping callable with allowlisted parameters: {ast.unparse(reference)!r}; "
+                f"preserve its parameter names by selecting only {name_only} "
+                "(without '*' or a: parameter entries)"
+            )
+
+    def apply(self, entries: list[str]) -> dict[str, str]:
+        if not entries:
+            return {}
+        selected = self.select([entry for entry in entries if not entry.startswith("attr:")])
+        attribute_plan, attribute_bindings, attribute_renames = plan_attributes(
+            self, [entry for entry in entries if entry.startswith("attr:")]
+        )
         if selected.keys() & attribute_bindings.keys():
             raise ValueError("Conflicting variable and attribute allowlist selections")
         self.used.update(self.strings)

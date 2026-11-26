@@ -182,6 +182,8 @@ def _obfuscate_modules(
             node.__dict__.setdefault("original_name", node.arg)
     announce("Eliminating dead code")
     eliminate_dead_code(linked)
+    if entries:
+        AllowlistRenamer(linked).preflight(entries)
     announce("Analyzing dataclasses")
     minify_dataclasses(linked)
     linked_trees = {"__main__": linked}

@@ -7,6 +7,7 @@ from python_minifier.rename.binding import BuiltinBinding
 
 from .analysis import inspects_frames
 from .renamers.allowlist import AllowlistRenamer
+from .renamers.external import ExternalReturns
 
 __all__: list[str] = ["eliminate_dead_code"]
 
@@ -39,6 +40,24 @@ def eliminate_dead_code(tree: ast.Module) -> None:
     used_members = {
         node.attr for node in analysis.nodes if isinstance(node, ast.Attribute)
     } | analysis.strings
+    closed_families: dict[ast.ClassDef, bool] = {}
+    escape_nodes = [
+        node for node in analysis.nodes
+        if isinstance(node, ast.Call)
+        or (
+            isinstance(node, ast.Attribute)
+            and node.attr in {"__dict__", "__getattribute__", "__getattr__"}
+        )
+    ]
+    receiver_types: dict[ast.AST, set[ast.ClassDef]] = {}
+    # External annotations depend only on lexical analysis. Reading one must
+    # not solve the unrelated whole-program attribute/callback flow graph.
+    external_returns = ExternalReturns(analysis)
+
+    def types(node: ast.AST) -> set[ast.ClassDef]:
+        if node not in receiver_types:
+            receiver_types[node] = analysis.type_targets(node)
+        return receiver_types[node]
 
     def unused_inherited_method(function: Definition) -> bool:
         owner = analysis.parents.get(function)
@@ -55,19 +74,24 @@ def eliminate_dead_code(tree: ast.Module) -> None:
                 analysis.check_receiver(receiver, function.name)
         except ImportError, AttributeError, OSError, TypeError, ValueError, SyntaxError:
             return False
+        if owner not in closed_families:
+            closed_families[owner] = closed_family(family)
+        return closed_families[owner]
+
+    def closed_family(family: frozenset[ast.ClassDef]) -> bool:
         # An arbitrary consumer can use APIs beyond the inherited contract.
         # Direct external calls receiving this class/instance remain opaque.
-        for node in analysis.nodes:
+        for node in escape_nodes:
             if (
                 isinstance(node, ast.Attribute)
                 and node.attr in {"__dict__", "__getattribute__", "__getattr__"}
-                and analysis.type_targets(node.value) & family
+                and types(node.value) & family
             ):
                 return False
             if not isinstance(node, ast.Call):
                 continue
             arguments = [*node.args, *(keyword.value for keyword in node.keywords)]
-            if not any(analysis.type_targets(argument) & family for argument in arguments):
+            if not any(types(argument) & family for argument in arguments):
                 continue
             target = analysis.target(node.func)
             if isinstance(
@@ -94,7 +118,7 @@ def eliminate_dead_code(tree: ast.Module) -> None:
                 }:
                     return False
             elif isinstance(node.func, ast.Attribute):
-                hint = analysis.attribute_flow.external_returns.hint(node.func.value)
+                hint = external_returns.hint(node.func.value)
                 containers = {
                     "weakref.WeakSet": {"add", "discard", "remove"},
                     "_weakrefset.WeakSet": {"add", "discard", "remove"},
@@ -115,8 +139,7 @@ def eliminate_dead_code(tree: ast.Module) -> None:
     for function in functions:
         binding = analysis.bindings.get(function)
         if (
-            (function not in reflected or unused_inherited_method(function))
-            and (
+            (
                 not function.decorator_list
                 or analysis.descriptor(function) is not None
                 or analysis.forwarding_decorators(function)
@@ -128,6 +151,7 @@ def eliminate_dead_code(tree: ast.Module) -> None:
             and binding is not None
             and analysis.definitions(binding) == [function]
             and not any(isinstance(ref, ast.Nonlocal) for ref in binding.references)
+            and (function not in reflected or unused_inherited_method(function))
         ):
             candidates.add(function)
 

@@ -122,6 +122,8 @@ class PrivateMethodRenamer(ArgumentRenamer):
         super().run()
 
     def run(self) -> None:
+        self._class_mros.clear()
+        self._member_bindings.clear()
         self.renamed = 0
         _, _, reflected = self.analyze_calls()
         references: dict[Function, list[ast.Attribute]] = {}

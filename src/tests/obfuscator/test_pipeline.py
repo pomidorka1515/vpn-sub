@@ -13,7 +13,9 @@ pytest.importorskip("python_minifier")
 import python_minifier
 
 import obfuscator
+from obfuscator import pipeline
 from obfuscator.pipeline import minify_tree, obfuscate_modules, prepare_tree
+from obfuscator.renamers.allowlist import AllowlistRenamer
 
 __all__: list[str] = []
 
@@ -43,6 +45,132 @@ def test_pipeline_rejects_empty_sources() -> None:
 def test_pipeline_rejects_ambiguous_module_names() -> None:
     with pytest.raises(ValueError, match="ambiguous module name: worker"):
         obfuscate_modules({Path("worker.py"): "", Path("worker/__init__.py"): ""}, [])
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        (["f:missing"], "target not found"),
+        (["c:helper"], "incorrect type"),
+        (["attr:Missing:value"], "target not found"),
+        (["f:helper*"], "Escaping callable"),
+        (["a:helper:value"], "Escaping callable"),
+    ],
+)
+def test_allowlist_errors_precede_expensive_renaming(
+    entries: list[str], message: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_dataclasses(tree: ast.Module) -> None:
+        pytest.fail("Invalid allowlist reached dataclass analysis")
+
+    monkeypatch.setattr(pipeline, "minify_dataclasses", unexpected_dataclasses)
+    with pytest.raises(ValueError, match=message):
+        obfuscate_modules(
+            {Path("main.py"): "def helper(value): return value\nprint(helper)\n"},
+            entries,
+            jobs=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("use", "message"),
+    [
+        ("alias = helper\nprint(alias)\n", "Escaping callable"),
+        ("__result__ = helper(**external())\n", r"Dynamic \*\*kwargs"),
+    ],
+)
+def test_parameter_preflight_follows_aliases_and_dynamic_keywords(
+    use: str, message: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_dataclasses(tree: ast.Module) -> None:
+        pytest.fail("Unsafe parameter allowlist reached dataclass analysis")
+
+    monkeypatch.setattr(pipeline, "minify_dataclasses", unexpected_dataclasses)
+    with pytest.raises(ValueError, match=message):
+        obfuscate_modules(
+            {Path("main.py"): "def helper(value): return value\n" + use},
+            ["f:helper*"],
+            jobs=1,
+        )
+
+
+def test_parameter_preflight_ignores_escapes_in_removed_code() -> None:
+    result = obfuscate_modules(
+        {
+            Path("main.py"): (
+                "def helper(value): return value\n"
+                "def unused(): external(helper)\n"
+                "__result__ = helper(value=4)\n"
+            ),
+        },
+        ["f:helper*"],
+        jobs=1,
+    )
+    assert result.renamed_parameters == 1
+    assert "unused" not in result.source
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [[], ["f:helper"], ["f:helper*"], ["a:helper:value"], ["f:unused*"], ["f:Record:_get*"]],
+)
+def test_allowlist_preflight_preserves_exact_results_and_warnings(
+    entries: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    originals = {
+        Path("main.py"): (
+            "class Record:\n"
+            " def _get(self, value): return value + 1\n"
+            "def helper(value): return Record()._get(value=value)\n"
+            "def unused(value): return value\n"
+            "__result__ = helper(value=4)\n"
+        ),
+    }
+    actual = obfuscate_modules(originals, entries, jobs=1)
+    actual_warnings = capsys.readouterr().err
+
+    def skip_preflight(self: AllowlistRenamer, entries: list[str]) -> None:
+        pass
+
+    monkeypatch.setattr(AllowlistRenamer, "preflight", skip_preflight)
+    expected = obfuscate_modules(originals, entries, jobs=1)
+    assert actual == expected
+    assert actual_warnings == capsys.readouterr().err
+
+
+def test_combined_allowlist_preserves_original_output_snapshot() -> None:
+    result = obfuscate_modules(
+        {
+            Path("main.py"): (
+                "from dataclasses import dataclass\n"
+                "@dataclass\n"
+                "class Point:\n value: int\n"
+                "class Record:\n"
+                " def __init__(self, payload): self.payload = payload\n"
+                " def read(self): return self.payload\n"
+                " def _calculate(self, value): return value + 1\n"
+                "def helper(value): return Record(Point(value)).read().value\n"
+                "__result__ = helper(value=4)\n"
+            ),
+        },
+        ["attr:Record:payload", "f:helper*", "c:Point", "f:Record:read"],
+        jobs=1,
+    )
+    # Captured from the pre-optimization pipeline, including exact name allocation.
+    assert result.source == (
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass as A\n"
+        "@A\n"
+        "class e:value:int\n"
+        "class g:\n"
+        "\tdef __init__(a,b):a.c=b\n"
+        "\tdef f(a):return a.c\n"
+        "def d(a):return g(e(a)).f().value\n"
+        "__result__=d(a=4)\n"
+    )
+    assert result.renames == {
+        "f:helper*": "d", "c:Point": "e", "f:Record:read": "f", "attr:Record:payload": "c",
+    }
 
 
 def test_cleanup_precedes_minification(monkeypatch: pytest.MonkeyPatch) -> None:

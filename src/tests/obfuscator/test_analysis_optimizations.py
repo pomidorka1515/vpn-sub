@@ -117,6 +117,36 @@ def test_type_hints_retain_nested_shape_and_incompleteness() -> None:
     assert merge_hints(TypeHint(incomplete=True), leaf).incomplete
 
 
+def test_member_lookup_caches_hits_and_misses_until_renames() -> None:
+    tree = ast.parse(
+        "class Parent:\n def _method(self): return 1\n"
+        "class Child(Parent): pass\n"
+    )
+    analysis = ArgumentRenamer({"fixture": tree})
+    parent, child = tree.body
+    assert isinstance(parent, ast.ClassDef)
+    assert isinstance(child, ast.ClassDef)
+    binding = analysis.member_binding(child, "_method")
+    assert binding is not None
+    assert analysis.member_binding(child, "missing") is None
+    assert analysis._member_bindings == {(child, "_method"): binding, (child, "missing"): None}
+    binding.rename("renamed")
+    analysis.run()
+    assert analysis.member_binding(child, "_method") is None
+    assert analysis.member_binding(child, "renamed") is binding
+
+
+def test_mro_cache_does_not_reuse_path_dependent_cycle_results() -> None:
+    tree = ast.parse("class First(Second): pass\nclass Second(First): pass\n")
+    analysis = ArgumentRenamer({"fixture": tree})
+    first, second = tree.body
+    assert isinstance(first, ast.ClassDef)
+    assert isinstance(second, ast.ClassDef)
+    assert analysis.class_mro(first, set()) == [first, second]
+    assert analysis.class_mro(second, set()) == [second, first]
+    assert analysis.class_mro(first, {id(second)}) == [first]
+
+
 def test_receiver_joins_reuse_unchanged_values_without_losing_alternatives() -> None:
     first = ast.ClassDef(name="First", bases=[], keywords=[], body=[], decorator_list=[])
     second = ast.ClassDef(name="Second", bases=[], keywords=[], body=[], decorator_list=[])

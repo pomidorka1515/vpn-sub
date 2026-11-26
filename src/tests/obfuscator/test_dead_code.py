@@ -10,6 +10,7 @@ pytest.importorskip("python_minifier")
 
 from obfuscator.dead_code import eliminate_dead_code
 from obfuscator.pipeline import obfuscate_modules, prepare_tree
+from obfuscator.renamers.allowlist import AllowlistRenamer
 
 __all__: list[str] = []
 
@@ -294,6 +295,45 @@ worker.info('hello')
 """)
     assert "handle" in names(tree)
     assert "unused" not in names(tree)
+
+
+def test_inherited_family_cache_keeps_per_method_conflicts_and_receiver_escapes() -> None:
+    tree = prune("""
+import logging
+class Closed(logging.Logger):
+    def handle(self, record): return 42
+    def unused_first(self): return 0
+    def unused_second(self): return 1
+class Escaping(logging.Logger):
+    def callback_first(self): return 0
+    def callback_second(self): return 1
+closed = Closed('closed')
+closed.info('hello')
+escaping = Escaping('escaping')
+external(escaping)
+""")
+    assert names(tree) == {"handle", "callback_first", "callback_second"}
+
+
+def test_external_container_checks_do_not_solve_attribute_flow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_flow(self: AllowlistRenamer) -> object:
+        pytest.fail("Dead-code annotation lookup built the whole-program flow graph")
+
+    monkeypatch.setattr(AllowlistRenamer, "attribute_flow", property(unexpected_flow))
+    tree = prune("""
+import logging
+from weakref import WeakSet
+class Worker(logging.Logger):
+    def unused_first(self): return 0
+    def unused_second(self): return 1
+registry = WeakSet()
+worker = Worker('fixture')
+registry.add(worker)
+worker.info('hello')
+""")
+    assert not names(tree)
 
 
 @pytest.mark.parametrize(

@@ -42,6 +42,8 @@ class ArgumentRenamer:
         self.hint_cache: dict[tuple[ast.AST, frozenset[int]], TypeHint] = {}
         self.root_hints: dict[ast.AST, TypeHint] = {}
         self._definitions: dict[Binding, list[ast.AST]] = {}
+        self._class_mros: dict[ast.ClassDef, list[ast.ClassDef]] = {}
+        self._member_bindings: dict[tuple[ast.ClassDef, str], Binding | None] = {}
         self.trees = trees
         self.parents: dict[ast.AST, ast.AST] = {}
         self.enclosing_classes: dict[ast.AST, ast.ClassDef | None] = {}
@@ -431,6 +433,9 @@ class ArgumentRenamer:
         return result
 
     def class_mro(self, owner: ast.ClassDef, seen: set[int]) -> list[ast.ClassDef]:
+        root = not seen
+        if root and owner in self._class_mros:
+            return self._class_mros[owner]
         if id(owner) in seen:
             return []
         seen = set(seen)
@@ -449,16 +454,23 @@ class ArgumentRenamer:
                 for inherited in self.class_mro(target, seen):
                     if inherited not in result:
                         result.append(inherited)
+        if root:
+            self._class_mros[owner] = result
         return result
 
     def member_binding(self, owner: ast.ClassDef, name: str) -> Binding | None:
+        key = (owner, name)
+        if key in self._member_bindings:
+            return self._member_bindings[key]
         for base in self.class_mro(owner, set()):
             binding = next(
                 (binding for binding in self.node_bindings(base) if binding.name == name),
                 None,
             )
             if binding is not None:
+                self._member_bindings[key] = binding
                 return binding
+        self._member_bindings[key] = None
         return None
 
     @staticmethod
@@ -1401,6 +1413,8 @@ class ArgumentRenamer:
 
     def run(self) -> None:
         self._definitions.clear()
+        self._class_mros.clear()
+        self._member_bindings.clear()
         self.root_hints.clear()
         self.hint_cache.clear()
         self.renamed = 0
