@@ -5,6 +5,8 @@ import builtins
 import inspect
 import threading
 from _thread import RLock  # ruff: ignore[import-private-name] - Inspect the native type without constructing a lock.
+from heapq import merge
+from operator import itemgetter
 from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
@@ -126,6 +128,29 @@ def plan_attributes(
         raise ValueError("Cannot rename attributes in a reflective namespace")
     flow = analysis.attribute_flow
     analysis.used.update(analysis.strings)
+    # A family's first field needs the full storage/escape check. Subsequent
+    # fields only need matching attributes and builtin reflection calls. Index
+    # those once, preserving tree order (and therefore fail-closed error order).
+    reflective = {
+        "__dict__", "__class__", "__getattribute__", "__setattr__", "__delattr__",
+        "__dir__", "__reduce__", "__reduce_ex__",
+    }
+    common: list[tuple[int, ast.AST]] = []
+    named: dict[str, list[tuple[int, ast.AST]]] = {}
+    for index, node in enumerate(nodes):
+        if id(node) in analysis.annotation_nodes:
+            continue
+        if isinstance(node, ast.Attribute):
+            if node.attr in reflective:
+                common.append((index, node))
+            else:
+                named.setdefault(node.attr, []).append((index, node))
+        elif isinstance(node, ast.Call) and node.args:
+            builtin = analysis.bindings.get(node.func)
+            if isinstance(cast(object, builtin), BuiltinBinding) and getattr(builtin, "name", "") in {
+                "getattr", "setattr", "delattr", "hasattr", "vars", "dir"
+            }:
+                common.append((index, node))
     for node in nodes:
         analysis.used.update(binding.name for binding in analysis.node_bindings(node))
         if isinstance(node, ast.Attribute):
@@ -171,7 +196,10 @@ def plan_attributes(
         verify_family = owner not in verified_families
         if verify_family:
             flow.prepare_contexts(family)
-        for node in nodes:
+        candidates = nodes if verify_family else (
+            node for _, node in merge(common, named.get(name, ()), key=itemgetter(0))
+        )
+        for node in candidates:
             if id(node) in analysis.annotation_nodes:
                 continue
             if verify_family:
@@ -184,10 +212,7 @@ def plan_attributes(
                     if not receivers <= family or flow.value(node.value).unknown:
                         raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
                     references.append(node)
-            if isinstance(node, ast.Attribute) and node.attr in {
-                "__dict__", "__class__", "__getattribute__", "__setattr__", "__delattr__",
-                "__dir__", "__reduce__", "__reduce_ex__",
-            }:
+            if isinstance(node, ast.Attribute) and node.attr in reflective:
                 receivers = flow.receivers(node.value)
                 if receivers & family:
                     raise ValueError(f"Reflective access to allowlisted attribute class: {ast.unparse(node)!r}")

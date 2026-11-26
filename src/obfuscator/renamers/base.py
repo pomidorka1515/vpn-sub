@@ -83,8 +83,10 @@ class ArgumentRenamer:
                 for child in ast.iter_child_nodes(node):
                     self.parents[child] = node
                     nodes.append(child)  # ruff: ignore[loop-iterator-mutation] - Breadth-first queue.
-                for binding in self.node_bindings(node):
-                    self.bindings.update((ref, binding) for ref in binding.references)
+                bindings = node.__dict__.get("bindings")
+                if bindings:
+                    for binding in cast(Sequence[Binding], bindings):
+                        self.bindings.update((ref, binding) for ref in binding.references)
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                     self.functions.append(node)
                 elif isinstance(node, ast.ClassDef):

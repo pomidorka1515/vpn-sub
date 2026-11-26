@@ -343,6 +343,9 @@ the parent resolves their transitive closure without sending ASTs back for each
 protocol-discovery round. Per-module cleanup and independent SQL literal
 minification also run in workers; linking, mixin
 folding, global renaming, and final whole-program minification remain sequential.
+The pinned python-minifier's printer uses a buffered token stream in this pipeline,
+without modifying its process-wide globals; its normal AST comparison remains enabled.
+Review this integration and its output-equivalence tests when updating python-minifier.
 The private-method and parameter passes share lexical indexes; caller safety and
 inference are rechecked after method names change.
 Worker count is capped at the number of input modules. The internal

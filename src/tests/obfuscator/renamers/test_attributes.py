@@ -43,6 +43,28 @@ __deleted__ = not hasattr(record, '_value')
     assert namespace["__deleted__"] is True
 
 
+def test_multiple_fields_keep_reflection_and_unresolved_receiver_checks() -> None:
+    source = """
+class Record:
+    def setup(self):
+        self.first = 3
+        self.second = 4
+record = Record()
+record.setup()
+setattr(record, 'second', getattr(record, 'second') + 1)
+__result__ = record.first, record.second, hasattr(record, 'second')
+"""
+    tree = ast.parse(source)
+    AllowlistRenamer(tree).apply(["attr:Record:first", "attr:Record:second"])
+    namespace: dict[str, Any] = {}
+    exec(compile(tree, "fixture.py", "exec"), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (3, 5, True)
+
+    unsafe = ast.parse(source + "\nunknown.second\n")
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        AllowlistRenamer(unsafe).apply(["attr:Record:first", "attr:Record:second"])
+
+
 def test_deep_attribute_chains_and_nested_selectors() -> None:
     depth = 30
     chain = ".child" * depth

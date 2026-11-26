@@ -11,8 +11,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import python_minifier
-
 from .aliases import consolidate_aliases, shorten_imports
 from .analysis import inspects_frames
 from .annotations import AnnotationIndex
@@ -24,6 +22,7 @@ from .debug import annotate_debug
 from .imports import optimize_imports
 from .linker import flatten, module_name
 from .markers import strip_markers
+from .minifier import minify
 from .mixins import fold_mixins, mark_mixin_origins
 from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
@@ -294,7 +293,7 @@ def minify_tree(
                         with suppress(SyntaxError):
                             pending.append(ast.parse(reference.value, mode="eval"))
     reflected = inspects_frames(tree)
-    result = python_minifier.minify(
+    result = minify(
         source,
         filename=filename,
         rename_locals=rename_locals and not reflected,
