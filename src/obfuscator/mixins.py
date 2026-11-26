@@ -802,6 +802,8 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                     "original_file",
                     "type_annotation",
                     "return_type",
+                    "expression_type",
+                    "type_parameters",
                     "annotation_path",
                     "source_module",
                     "no_rename",
@@ -845,7 +847,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
     # Helpers and nested container hints can still name erased feature classes.
     # Represent those types by every concrete consumer, never an arbitrary root.
     for child in ast.walk(tree):
-        for key in ("type_annotation", "return_type"):
+        for key in ("type_annotation", "return_type", "expression_type"):
             hint = child.__dict__.get(key)
             if isinstance(hint, TypeHint):
                 child.__dict__[key] = rewrite_hint(hint)

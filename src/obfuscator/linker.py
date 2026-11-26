@@ -35,6 +35,9 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         source_file += "/__init__.py" if tree.__dict__.get("is_package") else ".py"
         for node in analysis.module_nodes[module]:
             node.__dict__.setdefault("original_file", source_file)
+            line = getattr(node, "lineno", None)
+            if isinstance(line, int):
+                node.__dict__.setdefault("original_lineno", line)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 node.__dict__.setdefault("original_name", node.name)
                 if (isinstance(node, ast.ClassDef) and not node.name.startswith("_")) or node.__dict__.get("no_rename"):

@@ -9,10 +9,20 @@ from abc import ABCMeta
 from collections import deque
 from importlib import import_module
 from textwrap import dedent
-from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, ModuleType, UnionType
+from types import (
+    BuiltinFunctionType,
+    FunctionType,
+    GetSetDescriptorType,
+    MemberDescriptorType,
+    ModuleType,
+    UnionType,
+)
 from typing import TYPE_CHECKING, cast, get_args, get_origin, is_typeddict
 
-from ..annotations import AnnotationIndex, TypeHint, merge_hints
+from ..annotations import AnnotationIndex, TypeHint, container_origin, merge_hints
+from ..inference import operation_hint
+from .external_source import source_return
+from .stub_returns import StubReturns
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -40,6 +50,12 @@ def _static_member(owner: object, name: str, default: object = _MISSING) -> obje
     return inspect.getattr_static(owner, name, default)
 
 
+def _complete_hint(hint: TypeHint) -> bool:
+    return bool(hint) and not hint.incomplete and (
+        bool(hint.classes) or all(_complete_hint(argument) for argument in hint.arguments)
+    )
+
+
 class ExternalReturns:
     """Read external return annotations without calling APIs or evaluating hints."""
 
@@ -47,6 +63,9 @@ class ExternalReturns:
         self.analysis: AllowlistRenamer = analysis
         self.cache: dict[ast.expr, TypeHint] = {}
         self.annotations: dict[object, ast.expr | None] = {}
+        self.implementations: dict[FunctionType, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+        self.active_returns: set[FunctionType] = set()
+        self.stubs: StubReturns = StubReturns()
         self.paths: dict[str, TypeHint] = {}
         self.objects: dict[str, object] = {}
         self.sources: dict[str, tuple[AnnotationIndex, dict[str, ast.expr | ast.ClassDef | None]]] = {}
@@ -110,7 +129,8 @@ class ExternalReturns:
                 return TypeHint(origin="awaitable", arguments=arguments[-1:])
             if name in {"Optional", "Union"}:
                 return merge_hints(*arguments) if all(arguments) else TypeHint()
-            return TypeHint(base.classes, arguments=arguments)
+            variadic = base.origin == "tuple" and bool(elements) and isinstance(elements[-1], ast.Constant) and elements[-1].value is Ellipsis
+            return TypeHint(base.classes, origin=base.origin, arguments=arguments[:-1] if variadic else arguments, variadic=variadic)
         else:
             return TypeHint()
         if value is typing.Self:
@@ -120,6 +140,9 @@ class ExternalReturns:
     def runtime_hint(self, value: object) -> TypeHint:
         if value is typing.Any:
             return TypeHint()
+        if value is type(None):
+            # NoneType reports builtins as its module but is exported by types.
+            return TypeHint(("types.NoneType",))
         origin = get_origin(value)
         if origin is UnionType:
             arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
@@ -131,11 +154,14 @@ class ExternalReturns:
         arguments = tuple(self.runtime_hint(argument) for argument in get_args(value))
         value = origin or value
         if isinstance(value, type):
-            return TypeHint((f"{value.__module__}.{value.__qualname__}",), arguments=arguments)
+            path = f"{value.__module__}.{value.__qualname__}"
+            return TypeHint((path,), origin=container_origin(path), arguments=arguments)
         return TypeHint()
 
-    def returned(self, function: object, receiver: TypeHint | None = None, owner: type | None = None) -> TypeHint:
+    def returned(self, function: object, receiver: TypeHint | None = None, owner: type | None = None, *, call: ast.Call | None = None) -> TypeHint:
         receiver = receiver if receiver is not None else TypeHint()
+        if isinstance(function, BuiltinFunctionType):
+            return self.stubs.returned(f"{function.__module__}.{function.__name__}", call)
         if isinstance(function, (staticmethod, classmethod)):
             function = cast(
                 classmethod[object, ..., object] | staticmethod[..., object], function
@@ -146,9 +172,19 @@ class ExternalReturns:
             tree = ast.parse(dedent(inspect.getsource(function)))
             definition = tree.body[0]
             self.annotations[function] = definition.returns if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)) else None
+            if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self.implementations[function] = definition
         annotation = self.annotations[function]
         if annotation is None:
-            return TypeHint()
+            implementation = self.implementations.get(function)
+            if implementation is None or function in self.active_returns:
+                return TypeHint()
+            self.active_returns.add(function)
+            try:
+                hint = source_return(self, function, implementation, receiver)
+            finally:
+                self.active_returns.remove(function)
+            return TypeHint(origin="awaitable", arguments=(hint,)) if inspect.iscoroutinefunction(function) else hint
         parameters: dict[str, TypeHint] = {}
         if owner is not None:
             parameters = {
@@ -305,10 +341,59 @@ class ExternalReturns:
                 reaching[positions[assignment]] = definition
         return reaching[max(reaching)] if reaching else None
 
+    def external_factory(self, call: ast.Call, seen: frozenset[ast.AST]) -> bool:
+        """Verify an external callable binding without invoking its implementation."""
+        if callable(self.imported(call.func)):
+            return True
+        if not isinstance(call.func, ast.Attribute):
+            return False
+        receiver = self.hint(call.func.value, seen)
+        if not _complete_hint(receiver) or not receiver.classes or receiver.self_reference:
+            return False
+        for path in receiver.classes:
+            if path in self.analysis.annotation_classes:
+                return False
+            owner = self.resolve(path)
+            if not isinstance(owner, type) or not callable(_static_member(owner, call.func.attr, None)):
+                return False
+        return True
+
+    def rebound_hint(self, definitions: list[ast.AST], seen: frozenset[ast.AST]) -> TypeHint:
+        """Retain declared external factory contracts across cleanup-path stores."""
+        declarations = [
+            hint for definition in definitions
+            if isinstance(hint := definition.__dict__.get("type_annotation"), TypeHint)
+        ]
+        if not declarations:
+            return TypeHint()
+        declared = self.normalize(merge_hints(*declarations))
+        if not _complete_hint(declared):
+            return TypeHint()
+        alternatives = [declared]
+        for definition in definitions:
+            if isinstance(definition, ast.arg):
+                if not isinstance(definition.__dict__.get("type_annotation"), TypeHint):
+                    return TypeHint()
+                continue
+            assignment = self.analysis.parents.get(definition)
+            if not isinstance(definition, ast.Name) or not isinstance(assignment, (ast.Assign, ast.AnnAssign)):
+                return TypeHint()
+            value = assignment.value
+            if value is None or (isinstance(value, ast.Constant) and value.value is None):
+                continue
+            inferred = self.hint(value, seen)
+            if _complete_hint(inferred):
+                alternatives.append(inferred)
+            elif not isinstance(value, ast.Call) or not self.external_factory(value, seen):
+                return TypeHint()
+        return merge_hints(*alternatives)
+
     def expression(self, node: ast.expr, seen: frozenset[ast.AST]) -> TypeHint:
+        if isinstance(node.__dict__.get("expression_type"), TypeHint):
+            return self.normalize(self.analysis.value_hint(node))
         if not isinstance(node, (ast.Name, ast.IfExp)):
             hint = self.analysis.value_hint(node)
-            if hint:
+            if _complete_hint(hint):
                 return self.normalize(hint)
         if isinstance(node, ast.Await):
             awaited = self.hint(node.value, seen)
@@ -319,17 +404,55 @@ class ExternalReturns:
             return protocol.element() if protocol.origin == "awaitable" else TypeHint()
         if isinstance(node, ast.NamedExpr):
             return self.hint(node.value, seen)
+        if isinstance(node, ast.Attribute):
+            owners = self.analysis.receiver(node.value)[0]
+            hints: list[TypeHint] = []
+            for owner in owners:
+                values: list[TypeHint] = []
+                for base in self.analysis.class_mro(owner, set()):
+                    values.extend(
+                        self.hint(assignment.value, seen)
+                        for assignment in self.analysis.instance_assignments.get((id(base), node.attr), [])
+                        if assignment.value is not None
+                    )
+                    binding = self.analysis.member_binding(base, node.attr)
+                    for definition in self.analysis.definitions(binding) if binding is not None else []:
+                        parent = self.analysis.parents.get(definition)
+                        if isinstance(definition, ast.Name) and isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is not None:
+                            values.append(self.hint(parent.value, seen))
+                hints.append(merge_hints(*values) if values and all(values) else TypeHint())
+            return merge_hints(*hints) if hints and all(hints) else TypeHint()
         if isinstance(node, ast.Call):
+            structural = operation_hint(node, self.analysis.imported_path(node.func), lambda expression: self.hint(expression, seen) if isinstance(expression, ast.expr) else TypeHint())
+            if structural is not None:
+                return structural
             imported = self.imported(node.func)
             if isinstance(imported, type):
                 return TypeHint((f"{imported.__module__}.{imported.__qualname__}",))
             if imported is not None:
-                return self.returned(imported)
+                return self.returned(imported, call=node)
             if isinstance(node.func, ast.Attribute):
                 return self.method(self.hint(node.func.value, seen), node.func.attr)
         if isinstance(node, ast.Name):
             binding = self.analysis.bindings.get(node)
-            definitions = self.analysis.definitions(binding) if binding is not None else []
+            definitions: list[ast.AST] = self.analysis.definitions(binding) if binding is not None else []
+            # Exception targets are definitions themselves (not Store Names).
+            # A sibling handler's binding is not live in this handler. Do not
+            # narrow past a competing assignment, closure, or except* group.
+            if len(definitions) > 1 and any(isinstance(definition, ast.ExceptHandler) for definition in definitions):
+                handler_child: ast.AST = node
+                ancestor = self.analysis.parents.get(handler_child)
+                while ancestor is not None:
+                    if isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                        break
+                    if isinstance(ancestor, ast.ExceptHandler) and handler_child in ancestor.body:
+                        if ancestor in definitions and not any(
+                            definition is not ancestor and self.in_context_body(definition, ancestor)
+                            for definition in definitions
+                        ):
+                            definitions = [ancestor]
+                            break
+                    handler_child, ancestor = ancestor, self.analysis.parents.get(ancestor)
             if len(definitions) > 1 and isinstance(node.ctx, ast.Load):
                 if binding is not None:
                     reaching = self.reaching_local(node, binding, definitions)
@@ -354,8 +477,27 @@ class ExternalReturns:
                     child = parent
                     parent = self.analysis.parents.get(child)
             if len(definitions) != 1:
-                return TypeHint()
+                declared = self.analysis.value_hint(node)
+                normalized = self.normalize(declared) if declared else TypeHint()
+                return normalized or self.rebound_hint(definitions, seen)
             definition = definitions[0]
+            if isinstance(definition, ast.ExceptHandler):
+                if isinstance(self.analysis.parents.get(definition), ast.TryStar):
+                    return TypeHint()
+                caught = definition.type
+                alternatives = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+                exception_hints: list[TypeHint] = []
+                for alternative in alternatives:
+                    if alternative is None:
+                        return TypeHint()
+                    path = self.analysis.imported_path(alternative)
+                    if path is None:
+                        return TypeHint()
+                    exception = self.resolve(path)
+                    if not isinstance(exception, type) or not issubclass(exception, BaseException):
+                        return TypeHint()
+                    exception_hints.append(self.runtime_hint(exception))
+                return merge_hints(*exception_hints) if exception_hints and all(exception_hints) else TypeHint()
             if isinstance(definition, ast.alias):
                 path = self.analysis.imported_path(node)
                 return self.declared(path) if path is not None else TypeHint()
@@ -363,19 +505,38 @@ class ExternalReturns:
             if isinstance(annotation, TypeHint):
                 return self.normalize(annotation)
             parent = self.analysis.parents.get(definition)
+            if isinstance(parent, (ast.For, ast.AsyncFor, ast.comprehension)) and parent.target is definition:
+                return self.normalize(self.hint(parent.iter, seen).iterated())
+            if isinstance(parent, (ast.Tuple, ast.List)):
+                located = self.analysis.target_indices(definition)
+                if located is not None:
+                    indices, container = located
+                    statement = self.analysis.parents.get(container)
+                    if isinstance(statement, (ast.Assign, ast.AnnAssign)) and statement.value is not None:
+                        hint = self.hint(statement.value, seen)
+                    elif isinstance(statement, (ast.For, ast.AsyncFor, ast.comprehension)):
+                        hint = self.hint(statement.iter, seen).iterated()
+                    else:
+                        return TypeHint()
+                    for index in indices:
+                        hint = hint.element(index)
+                    return hint
             if isinstance(parent, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and parent.value is not None:
                 return self.hint(parent.value, seen)
             if isinstance(parent, ast.withitem):
                 statement = self.analysis.parents.get(parent)
                 asynchronous = isinstance(statement, ast.AsyncWith)
-                entered = self.method(self.hint(parent.context_expr, seen), "__aenter__" if asynchronous else "__enter__")
+                context = self.hint(parent.context_expr, seen)
+                if context.origin == ("async_contextmanager" if asynchronous else "contextmanager"):
+                    return context.element()
+                entered = self.method(context, "__aenter__" if asynchronous else "__enter__")
                 return entered.element() if asynchronous and entered.origin == "awaitable" else entered
         if isinstance(node, ast.IfExp):
             left, right = self.hint(node.body, seen), self.hint(node.orelse, seen)
             return merge_hints(left, right) if left and right else TypeHint()
         return TypeHint()
 
-    def in_context_body(self, node: ast.AST, context: ast.With | ast.AsyncWith) -> bool:
+    def in_context_body(self, node: ast.AST, context: ast.With | ast.AsyncWith | ast.ExceptHandler) -> bool:
         # Walk from the handful of competing stores, not through every
         # descendant of the with suite for each receiver use.
         parent = self.analysis.parents.get(node)

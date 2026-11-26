@@ -387,7 +387,11 @@ class ReleaseCleanup(ast.NodeTransformer):
         if self.typing_name(node.func) == "TypedDict":
             return ast.copy_location(ast.Name(id="dict", ctx=ast.Load()), node)
         if self.typing_name(node.func) == "cast" and len(node.args) == 2 and not node.keywords:
-            return cast(ast.AST, self.visit(node.args[1]))
+            value = cast(ast.AST, self.visit(node.args[1]))
+            hint = node.__dict__.get("expression_type")
+            if hint is not None:
+                value.__dict__["expression_type"] = hint
+            return value
         if self.typing_name(node.func) in {"TypeVar", "TypeVarTuple", "ParamSpec"}:
             return ast.copy_location(ast.Name(id="object", ctx=ast.Load()), node)
         if (isinstance(node.func, ast.Name) and node.func.id in self.field_names) or (

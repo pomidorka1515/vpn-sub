@@ -432,7 +432,7 @@ class AttributeFlow:
         if isinstance(node, ast.expr) and node in self.analysis.parents and not value.owners and not value.functions and not value.containers:
             owners = self.static_receiver(node)
             if owners:
-                value = Value(owners)
+                value = Value(owners, unknown=self.analysis.value_hint(node).incomplete)
         self.values[node] = value
         return value
 
@@ -448,7 +448,7 @@ class AttributeFlow:
                 if -len(sources) <= index < len(sources):
                     source = sources[index]
                     values.append(self.iterated_value(self.value(source, seen)) if source is not None else _BOTTOM)
-            elif isinstance(container, (ast.Tuple, ast.List)) and -len(container.elts) <= index < len(container.elts):
+            elif isinstance(container, (ast.Tuple, ast.List)) and not any(isinstance(element, ast.Starred) for element in container.elts) and -len(container.elts) <= index < len(container.elts):
                 values.append(self.value(container.elts[index], seen))
             else:
                 values.append(self.container_items[container])
@@ -570,6 +570,19 @@ class AttributeFlow:
                     record = self.records.get(owner)
                     if node.attr in self.written_fields or (record is not None and node.attr in record[1]):
                         pending = True
+                    elif (not definitions and any(
+                        node.attr in base.__dict__.get("field_types", {})
+                        for base in analysis.mro(owner)
+                    )) or (definitions and all(
+                        isinstance(definition, ast.Name)
+                        and isinstance(declaration := analysis.parents.get(definition), ast.AnnAssign)
+                        and declaration.value is None
+                        for definition in definitions
+                    )):
+                        # An annotation alone creates no runtime attribute.
+                        # Concrete subclasses supply their visible table values;
+                        # the declaration is not another opaque table instance.
+                        values.append(_BOTTOM)
                     else:
                         values.append(_UNKNOWN)
             if values:
@@ -651,7 +664,7 @@ class AttributeFlow:
         if isinstance(node, ast.expr):
             inferred = self.static_receiver(node)
             if inferred:
-                return Value(inferred)
+                return Value(inferred, unknown=analysis.value_hint(node).incomplete)
         return _UNKNOWN
 
     def result(self, function: Function, seen: frozenset[ast.AST]) -> Value:
@@ -1054,7 +1067,11 @@ class AttributeFlow:
                         else:
                             previous = self.container_items[node]
                             elements = [node.elt] if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) else node.elts
-                            updated = previous.merge(self.join([self.value(element) for element in elements]))
+                            updated = previous.merge(self.join([
+                                self.iterated_value(self.value(element.value))
+                                if isinstance(element, ast.Starred) else self.value(element)
+                                for element in elements
+                            ]))
                             if updated is not previous:
                                 self.container_items[node] = updated
                                 self.changed = True
@@ -1114,9 +1131,10 @@ class AttributeFlow:
     def describe(self, node: ast.AST) -> str:
         function = self.enclosing_function(node)
         origin = function if function is not None else node
-        source = origin.__dict__.get("original_file", "<staging>")
+        source = node.__dict__.get("original_file", origin.__dict__.get("original_file", "<staging>"))
         scope = ":".join(self.analysis.path(function)) if function is not None else "<module>"
-        return f"{ast.unparse(node)!r} at {source}:{getattr(node, 'lineno', '?')} ({scope})"
+        line = node.__dict__.get("original_lineno", getattr(node, "lineno", "?"))
+        return f"{ast.unparse(node)!r} at {source}:{line} ({scope})"
 
     def imported_namespace(self, node: ast.expr) -> bool:
         """An imported module is not an unresolved application instance."""
@@ -1152,7 +1170,7 @@ class AttributeFlow:
                         continue
                 self.external_types[path] = resolved
             external = self.external_types[path]
-            if external is None:
+            if external is None or external in {object, type}:
                 return False
             for owner in family:
                 for base in self.analysis.mro(owner):

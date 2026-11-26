@@ -330,6 +330,10 @@ pieces are left unchanged. Queries are never executed during minification.
 The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
+Validate generated Python before Nuitka compilation with
+`venv/bin/python scripts/smoke_async_release.py --source build/app.min.py`.
+This uses disposable loopback dependencies and verifies serving, bundled frontend
+resources, SQLite, shutdown, and restart without using deployment state.
 The CLI reports build stages and elapsed time on stderr as the build runs, ending
 with `Completed in 300.32s` (the total duration, formatted to two decimal places).
 `--jobs N` controls a reusable multiprocessing executor, defaulting to half the
@@ -420,7 +424,55 @@ sync/async context managers. Async function results and annotated awaitables are
 unwrapped at `await`; generic context-manager parameters and `Self` are retained.
 Annotations are read as syntax, not evaluated, and external APIs are never called
 to infer their results. Missing or unsupported annotations and unknown union
-alternatives still fail closed for same-spelled fields.
+alternatives still fail closed for same-spelled fields. Ordinary exception handlers
+also establish external receiver types from resolved exception classes, including
+import aliases and literal exception tuples. Sibling handlers may reuse a target
+name; competing assignments, unresolved alternatives, and `except*` groups do not
+establish a receiver type.
+Shared inference follows imported and re-exported type aliases across modules,
+including nested container shapes. Cyclic or unresolved alias alternatives retain
+uncertainty instead of proving an unrelated receiver. Receiver errors retain
+original source line numbers after mixin methods are relocated.
+Straight-line self-rebindings read the incoming parameter/assignment hints on
+their right-hand side, rather than recursively depending on their own store.
+Optional `None` alternatives do not invent unknown ordinary-attribute receivers.
+Starred list/tuple/set construction retains element flow without inventing fixed
+positions after an expansion. Annotation-only class tables are declarations, not
+additional opaque runtime values alongside their concrete subclass tables.
+Shared receiver inference composes container shapes through builtin conversions,
+`zip`/`enumerate`, `next`, mapping views, and tuple slices. Async calls retain an
+awaitable layer; `asyncio.gather` (including starred iterable inputs), task creation,
+`shield`, and `wait_for` preserve their result shapes. Standard-operation rules
+use resolved import/builtin bindings, not identifier spellings. PEP 695 generic
+function parameters and ordinary generic class fields/methods are instantiated
+from visible argument shapes, including generic constructor arguments. Annotated
+callable return shapes and visible function references also let generic callback
+dispatchers retain their result receivers. These are syntax-only substitutions,
+not a replacement for a type checker; unsupported variadic generics and
+unresolved substitutions do not establish receiver types. Generic calls bind
+defaults, positional-only/keyword-only arguments, fixed tuple expansions, literal
+keyword dictionaries, and ordinary variadic arguments before substituting return
+shapes. Unknown expansions and invalid bindings cannot prove a receiver type.
+Visible custom containers use annotated `__iter__`/`__next__`, async iteration,
+and `__getitem__` protocols; generic arguments are projected through visible
+parameterized base classes rather than adding each container to a name table.
+Opaque protocol alternatives remain uncertain. Runtime expression joins retain
+unknown alternatives, and different-length tuple alternatives are widened rather
+than inventing fixed element positions. Binding annotations
+survive verified imported-factory reassignments and nested cleanup paths, including
+methods on statically resolved external instances. Callable bindings and receiver
+classes are inspected without invoking factories; opaque
+callback rebindings still fail closed, and known conflicting assignment types
+are retained rather than hidden by the declaration.
+Explicit `typing.cast` shapes survive removal of the runtime cast. Captured
+builtin aliases (including folded static/class method decorators) retain their
+binding semantics. External Python factories without return annotations can
+supply closed constructor/local/tuple return shapes from inspected source.
+Native functions can use the stdlib stubs bundled with the pinned development
+`mypy` dependency: stubs are parsed, not imported, and every overload compatible
+with the supplied argument names/count must have a known result. Missing stubs,
+unsupported generic returns, recursive or opaque source paths remain unknown.
+Transparent `contextlib` closing/null contexts preserve their wrapped type.
 External bases are resolved through installed imports (including aliases and generic
 subscriptions) without constructing instances or evaluating base expressions. Their
 inherited Python implementations and receiver helpers are inspected for member/field

@@ -326,6 +326,9 @@ class AllowlistRenamer(ArgumentRenamer):
         inherited = self.super_bindings(node)
         if inherited is not None:
             return inherited
+        hint = self.value_hint(node.value, seen)
+        if hint.incomplete or any(path not in self.annotation_classes and path != "types.NoneType" for path in hint.classes):
+            return set()
         owners, _ = self.receiver(node.value, seen)
         return {
             binding for owner in owners if (binding := self.member(owner, node.attr)) is not None
@@ -864,7 +867,11 @@ class AllowlistRenamer(ArgumentRenamer):
                     # unrelated, even when its field has the same spelling.
                     if flow_owners and not receiver.unknown and members.isdisjoint(watched):
                         continue
-                    if receiver.unknown or not members or None in members:
+                    hint = self.value_hint(node.value)
+                    mixed_external = any(path in self.annotation_classes for path in hint.classes) and any(
+                        path not in self.annotation_classes and path != "types.NoneType" for path in hint.classes
+                    )
+                    if receiver.unknown or mixed_external or not members or None in members:
                         raise ValueError(f"Unresolved receiver for allowlisted attribute {flow.describe(node)}")
                     targets = {member for member in members if member is not None}
                 affected = targets & watched
@@ -947,8 +954,14 @@ class AllowlistRenamer(ArgumentRenamer):
                         not (isinstance(parent, ast.Call) and parent.func is node)
                         and self.alias_assignment(node) is None
                     ):
+                        name_only = ", ".join(sorted(
+                            f"f:{function.__dict__.get('original_file', '<staging>')}:{':'.join(self.path(function))}"
+                            for function in callable_targets & parameter_functions.keys()
+                        ))
                         raise ValueError(
-                            f"Escaping callable with allowlisted parameters: {ast.unparse(node)!r}"
+                            f"Escaping callable with allowlisted parameters: {ast.unparse(node)!r}; "
+                            f"preserve its parameter names by selecting only {name_only} "
+                            "(without '*' or a: parameter entries)"
                         )
         removed_statements: set[ast.AST] = set()
         for binding, (_, _, definition) in selected.items():

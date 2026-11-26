@@ -20,6 +20,108 @@ from tests.support.obfuscator import allowlisted
 __all__: list[str] = []
 
 
+@pytest.mark.parametrize("factory", ["Path(path).open", "file_path.open"])
+def test_optional_external_file_method_factory_in_cleanup(factory: str) -> None:
+    source = f"""
+from pathlib import Path
+import io
+class Selected:
+    def close(self): return 7
+def cleanup(path):
+    file_path = Path(path)
+    handle: io.BufferedRandom | None = None
+    try:
+        handle = {factory}('a+b')
+    except Exception:
+        try:
+            if handle is not None:
+                handle.close()
+        finally:
+            handle = None
+__result__ = Selected().close()
+"""
+    result, _ = allowlisted(source, ["f:Selected:close"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+    assert "handle.close()" in result
+
+
+@pytest.mark.parametrize("replacement", ["opaque()", "opaque().open()", "Selected()", "Path(path).open('a+b') if flag else opaque()"])
+def test_declared_file_receiver_does_not_hide_uncertain_rebindings(replacement: str) -> None:
+    source = f"""
+from pathlib import Path
+import io
+class Selected:
+    def close(self): return 7
+def cleanup(path):
+    handle: io.BufferedRandom | None = None
+    try:
+        handle = {replacement}
+    finally:
+        if handle is not None:
+            handle.close()
+"""
+    with pytest.raises(ValueError, match=r"Unresolved|Ambiguous"):
+        allowlisted(source, ["f:Selected:close"])
+
+
+@pytest.mark.parametrize("caught", ["OSError", "(OSError, RuntimeError)", "ErrorAlias"])
+def test_attribute_overlap_external_exception_handler(caught: str) -> None:
+    source = f"""
+from builtins import OSError as ErrorAlias
+class Record:
+    def __init__(self): self.filename = 'private'
+record = Record()
+def read():
+    try:
+        raise ValueError('first')
+    except ValueError as exc:
+        pass
+    try:
+        raise OSError(2, 'missing', 'public')
+    except {caught} as exc:
+        return exc.filename
+__result__ = record.filename, read()
+"""
+    result, _ = allowlisted(source, ["attr:Record:filename"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == ("private", "public")
+    assert "exc.filename" in result
+
+
+@pytest.mark.parametrize("assignment", ["exc = unknown", "if flag: exc = unknown"])
+def test_exception_handler_rebinding_remains_uncertain(assignment: str) -> None:
+    source = f"""
+class Record:
+    def __init__(self): self.filename = 'private'
+record = Record()
+try:
+    raise OSError()
+except OSError as exc:
+    {assignment}
+    result = exc.filename
+"""
+    with pytest.raises(ValueError, match="Unresolved"):
+        allowlisted(source, ["attr:Record:filename"])
+
+
+@pytest.mark.parametrize("clause", ["except (OSError, unknown) as exc:", "except* OSError as exc:"])
+def test_unsupported_exception_handler_remains_uncertain(clause: str) -> None:
+    source = f"""
+class Record:
+    def __init__(self): self.filename = 'private'
+record = Record()
+try:
+    raise OSError()
+{clause}
+    result = exc.filename
+"""
+    with pytest.raises(ValueError, match="Unresolved"):
+        allowlisted(source, ["attr:Record:filename"])
+
+
 @pytest.mark.parametrize(
     "entries",
     [
@@ -127,6 +229,60 @@ __result__ = record.{name}, len(items)
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == (7, 0 if name == "get" else 1)
     assert f"items.{name}" in result
+
+
+@pytest.mark.parametrize("star", ["", "*"])
+@pytest.mark.parametrize("annotation", ["", ": deque[str]"])
+def test_allowlisted_method_overlaps_deque_append(star: str, annotation: str) -> None:
+    source = f"""
+from collections import deque
+class Record:
+    def append(self, value): return value + 1
+def build():
+    items{annotation} = deque()
+    items.append('link')
+    items.appendleft('first')
+    return Record().append(value=7), tuple(items)
+__result__ = build()
+"""
+    result, names = allowlisted(source, [f"f:Record:append{star}"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (8, ("first", "link"))
+    assert "items.append(" in result
+    assert f"f:Record:append{star}" in names
+
+
+def test_allowlisted_method_overlaps_deque_field_append() -> None:
+    source = """
+from collections import deque
+class Record:
+    def append(self, value): return value + 1
+class Queue:
+    def __init__(self): self._pending: deque[str] = deque()
+    def enqueue(self, value): self._pending.append(value)
+queue = Queue()
+queue.enqueue('link')
+__result__ = Record().append(value=7), tuple(queue._pending)
+"""
+    result, _ = allowlisted(source, ["f:Record:append*"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (8, ("link",))
+    assert "self._pending.append(" in result
+
+
+def test_deque_annotation_uncertainty_still_fails_closed() -> None:
+    source = """
+from collections import deque
+class Record:
+    def append(self, value): return value
+def build(items: deque[str] | Unknown):
+    items.append('link')
+__result__ = Record().append(value=7)
+"""
+    with pytest.raises(ValueError, match=r"Unresolved|Ambiguous"):
+        allowlisted(source, ["f:Record:append*"])
 
 
 @pytest.mark.parametrize("star", ["", "*"])
@@ -691,7 +847,7 @@ __result__ = json.loads("NaN", parse_constant=reject_nonfinite_constant)
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == "nan"
     assert set(renames) == {"f:reject_nonfinite_constant"}
-    with pytest.raises(ValueError, match="Escaping callable"):
+    with pytest.raises(ValueError, match=r"Escaping callable.*f:.*:reject_nonfinite_constant.*without '\*'"):
         allowlisted(source, ["f:reject_nonfinite_constant*"])
 
 

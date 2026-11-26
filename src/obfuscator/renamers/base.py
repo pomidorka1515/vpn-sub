@@ -4,6 +4,7 @@ import ast
 import keyword
 from collections import Counter
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
@@ -15,6 +16,7 @@ from python_minifier.rename.resolve_names import resolve_names
 
 from ..analysis import Binding, annotation_nodes, inspects_frames
 from ..annotations import TypeHint, merge_hints
+from ..inference import bind_call, join_hints, operation_hint, unify_hint
 
 if TYPE_CHECKING:
     from ..analysis import Function
@@ -58,6 +60,12 @@ class ArgumentRenamer:
         self.skipped: Counter[str] = Counter()
         self.annotation_nodes: set[int] = set()
         self.annotation_classes: dict[str, ast.ClassDef] = {}
+        self.annotation_aliases: dict[str, TypeHint] = {
+            path: hint
+            for tree in trees.values()
+            for path, hint in tree.__dict__.get("annotation_aliases", {}).items()
+        }
+        self.canonical_hints: dict[TypeHint, TypeHint] = {}
         assignments: list[ast.Assign | ast.AnnAssign] = []
         for module, tree in trees.items():
             # Use the minifier's lexical resolver rather than text replacement:
@@ -127,21 +135,11 @@ class ArgumentRenamer:
         if isinstance(function, ast.Lambda) or len(function.decorator_list) != 1:
             return None
         decorator = function.decorator_list[0]
-        if not isinstance(self.parents.get(function), ast.ClassDef) or not isinstance(
-            decorator, ast.Name
-        ):
+        if not isinstance(self.parents.get(function), ast.ClassDef):
             return None
-        binding = self.bindings.get(decorator)
-        if (
-            decorator.id in {"staticmethod", "classmethod"}
-            and isinstance(cast(object, binding), BuiltinBinding)
-            and binding is not None
-            and all(
-                isinstance(reference, ast.Name) and isinstance(reference.ctx, ast.Load)
-                for reference in binding.references
-            )
-        ):
-            return decorator.id
+        path = self.imported_path(decorator)
+        if path in {"builtins.staticmethod", "builtins.classmethod"}:
+            return path.removeprefix("builtins.")
         return None
 
     def imported_path(self, node: ast.AST, seen: frozenset[int] = frozenset()) -> str | None:
@@ -152,6 +150,8 @@ class ArgumentRenamer:
             prefix = self.imported_path(node.value, seen)
             return f"{prefix}.{node.attr}" if prefix else None
         binding = self.bindings.get(node)
+        if isinstance(cast(object, binding), BuiltinBinding):
+            return f"builtins.{getattr(binding, 'name', '')}"
         definitions = self.definitions(binding) if binding is not None else []
         if len(definitions) != 1:
             return None
@@ -420,6 +420,7 @@ class ArgumentRenamer:
         return None
 
     def hint_types(self, hint: TypeHint, owner: ast.ClassDef | None) -> set[ast.ClassDef]:
+        hint = self.canonical_hint(hint)
         result: set[ast.ClassDef] = set()
         if hint.self_reference and owner is not None:
             result.add(owner)
@@ -436,6 +437,7 @@ class ArgumentRenamer:
         seen.add(id(owner))
         result = [owner]
         for base in owner.bases:
+            base = base.value if isinstance(base, ast.Subscript) else base
             target = self.binding_target(
                 self.bindings.get(base) if isinstance(base, ast.Name) else None,
                 set(),
@@ -471,8 +473,42 @@ class ArgumentRenamer:
         path = owner.__dict__.get("annotation_path")
         return TypeHint((path,)) if isinstance(path, str) else TypeHint()
 
+    def canonical_hint(self, hint: TypeHint, seen: frozenset[str] = frozenset()) -> TypeHint:
+        """Follow syntax-only re-exports and aliases, including nested shapes."""
+        if not seen and hint in self.canonical_hints:
+            return self.canonical_hints[hint]
+        arguments = tuple(self.canonical_hint(argument, seen) for argument in hint.arguments)
+        result = replace(hint, arguments=arguments)
+        if hint.origin != "parameter" and hint.classes:
+            alternatives: list[TypeHint] = []
+            for path in hint.classes:
+                alias = self.annotation_aliases.get(path)
+                if path in self.annotation_classes or alias is None:
+                    expanded = TypeHint((path,))
+                elif path in seen:
+                    expanded = TypeHint(incomplete=True)
+                else:
+                    expanded = self.canonical_hint(alias, seen | {path})
+                    if not expanded:
+                        expanded = replace(expanded, incomplete=True)
+                alternatives.append(replace(
+                    expanded,
+                    self_reference=hint.self_reference or expanded.self_reference,
+                    origin=hint.origin or expanded.origin,
+                    arguments=arguments or expanded.arguments,
+                    variadic=hint.variadic or expanded.variadic,
+                    incomplete=hint.incomplete or expanded.incomplete,
+                ))
+            result = merge_hints(*alternatives)
+        if not seen:
+            self.canonical_hints[hint] = result
+        return result
+
     def resolved_hint(self, hint: TypeHint, owner: ast.ClassDef | None) -> TypeHint:
         """Resolve a ``Self`` marker relative to the class that declared it."""
+        hint = self.canonical_hint(hint)
+        if hint.arguments:
+            hint = replace(hint, arguments=tuple(self.resolved_hint(argument, owner) for argument in hint.arguments))
         if not hint.self_reference:
             return hint
         classes = hint.classes
@@ -503,28 +539,32 @@ class ArgumentRenamer:
             return self.destructured_hint(definition, seen)
         return TypeHint()
 
-    def member_hint(self, owner: ast.ClassDef, name: str, seen: set[int]) -> TypeHint:
+    def member_hint(self, owner: ast.ClassDef, name: str, seen: set[int], receiver: TypeHint | None = None) -> TypeHint:
         result = TypeHint()
         for base in self.class_mro(owner, set()):
+            inherited = TypeHint()
             fields = cast(object, base.__dict__.get("field_types"))
             if isinstance(fields, dict):
                 typed_fields = cast(dict[str, object], fields)
                 hint = typed_fields.get(name)
                 if isinstance(hint, TypeHint):
-                    result = merge_hints(result, self.resolved_hint(hint, base))
+                    inherited = merge_hints(inherited, self.resolved_hint(hint, base))
             binding = next(
                 (binding for binding in self.node_bindings(base) if binding.name == name),
                 None,
             )
             if binding is not None:
                 for definition in self.definitions(binding):
-                    result = merge_hints(result, self.definition_hint(definition, seen, base))
+                    inherited = merge_hints(inherited, self.definition_hint(definition, seen, base))
             for assignment in self.instance_assignments.get((id(base), name), []):
                 hint = assignment.__dict__.get("type_annotation")
                 if isinstance(hint, TypeHint):
-                    result = merge_hints(result, self.resolved_hint(hint, base))
+                    inherited = merge_hints(inherited, self.resolved_hint(hint, base))
                 if assignment.value is not None:
-                    result = merge_hints(result, self.value_hint(assignment.value, seen))
+                    inherited = merge_hints(inherited, self.value_hint(assignment.value, seen))
+            if receiver is not None:
+                inherited = self.instantiate_member(inherited, base, receiver)
+            result = merge_hints(result, inherited)
         return result
 
     def target_indices(self, definition: ast.AST) -> tuple[list[int], ast.AST] | None:
@@ -555,18 +595,51 @@ class ArgumentRenamer:
 
     def enter_hint(self, context: ast.expr, seen: set[int], *, asynchronous: bool) -> TypeHint:
         method = "__aenter__" if asynchronous else "__enter__"
-        owners = self.hint_types(self.value_hint(context, seen), self.enclosing_class(context))
+        context_hint = self.value_hint(context, seen)
+        if context_hint.origin == ("async_contextmanager" if asynchronous else "contextmanager"):
+            return context_hint.element()
+        entered = self.protocol_hint(context_hint, method)
+        return entered.element() if asynchronous and entered.origin == "awaitable" else entered
+
+    def protocol_hint(self, receiver: TypeHint, method: str) -> TypeHint:
+        """Read a visible special method's result without executing user code."""
+        if receiver.incomplete:
+            return TypeHint(incomplete=True)
+        owners = self.hint_types(receiver, None)
+        if not owners or len(owners) != len(receiver.classes):
+            return TypeHint(incomplete=True)
         hints: list[TypeHint] = []
         for owner in owners:
             binding = self.member_binding(owner, method)
             if binding is None:
+                hints.append(TypeHint(incomplete=True))
                 continue
             for definition in self.definitions(binding):
                 if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     hint = definition.__dict__.get("return_type")
-                    if isinstance(hint, TypeHint):
-                        hints.append(self.resolved_hint(hint, owner))
-        return merge_hints(*hints)
+                    if isinstance(hint, TypeHint) and (not definition.decorator_list or self.descriptor(definition) is not None):
+                        declaring = self.parents.get(definition)
+                        result = self.instantiate_member(self.resolved_hint(hint, owner), declaring if isinstance(declaring, ast.ClassDef) else owner, receiver)
+                        if hint.self_reference and not hint.origin and not hint.arguments:
+                            result = merge_hints(result, receiver)
+                        hints.append(TypeHint(origin="awaitable", arguments=(result,)) if isinstance(definition, ast.AsyncFunctionDef) else result)
+                    else:
+                        hints.append(TypeHint(incomplete=True))
+                else:
+                    hints.append(TypeHint(incomplete=True))
+        return join_hints(hints)
+
+    def iterated_hint(self, receiver: TypeHint, *, asynchronous: bool = False) -> TypeHint:
+        """Infer iteration structurally, including ordinary generic containers."""
+        if receiver.origin in {"sequence", "mapping", "tuple"}:
+            return receiver.iterated()
+        iterator = self.protocol_hint(receiver, "__aiter__" if asynchronous else "__iter__")
+        if iterator.origin in {"sequence", "mapping", "tuple"}:
+            return iterator.iterated()
+        result = self.protocol_hint(iterator, "__anext__" if asynchronous else "__next__")
+        if asynchronous and result.origin == "awaitable":
+            return result.element()
+        return result
 
     def container_hint(self, container: ast.AST, seen: set[int]) -> TypeHint:
         """The annotation type produced by the source of a store target container."""
@@ -578,7 +651,7 @@ class ArgumentRenamer:
                 return TypeHint()
             return self.value_hint(parent.value, seen)
         if isinstance(parent, (ast.For, ast.AsyncFor)) and parent.target is container:
-            return self.value_hint(parent.iter, seen).iterated()
+            return self.iterated_hint(self.value_hint(parent.iter, seen), asynchronous=isinstance(parent, ast.AsyncFor))
         if isinstance(parent, ast.withitem):
             statement = self.parents.get(parent)
             if (
@@ -601,7 +674,7 @@ class ArgumentRenamer:
         if isinstance(parent, ast.NamedExpr) and parent.target is container:
             return self.value_hint(parent.value, seen)
         if isinstance(parent, ast.comprehension) and parent.target is container:
-            return self.value_hint(parent.iter, seen).iterated()
+            return self.iterated_hint(self.value_hint(parent.iter, seen), asynchronous=bool(parent.is_async))
         return TypeHint()
 
     def destructured_hint(self, definition: ast.AST, seen: set[int]) -> TypeHint:
@@ -658,13 +731,47 @@ class ArgumentRenamer:
             return TypeHint()
         return hint
 
+    def incoming_definitions(self, node: ast.Name, definitions: list[ast.AST]) -> list[ast.AST]:
+        """A self-rebinding's RHS reads the previous value, not its own store."""
+        child: ast.AST = node
+        parent = self.parents.get(child)
+        while parent is not None and not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            if isinstance(parent, (ast.Assign, ast.AnnAssign)) and parent.value is child:
+                scope = self.parents.get(parent)
+                if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    return definitions
+                positions = {statement: index for index, statement in enumerate(scope.body)}
+                if parent not in positions or not any(self.parents.get(definition) is parent for definition in definitions):
+                    return definitions
+                prior: list[ast.AST] = []
+                for definition in definitions:
+                    statement = self.parents.get(definition)
+                    if isinstance(definition, ast.arg) and statement is scope.args:
+                        prior.append(definition)
+                    elif isinstance(statement, (ast.Assign, ast.AnnAssign)) and statement in positions:
+                        if positions[statement] < positions[parent]:
+                            prior.append(definition)
+                    else:
+                        return definitions
+                return prior or definitions
+            child, parent = parent, self.parents.get(parent)
+        return definitions
+
     def name_hint(self, node: ast.Name, seen: set[int]) -> TypeHint:
         binding = self.bindings.get(node)
         definitions = self.definitions(binding) if binding is not None else []
         if len(definitions) > 1:
+            definitions = self.incoming_definitions(node, definitions)
+        if len(definitions) > 1:
             hints: list[TypeHint] = []
+            declared = merge_hints(*(
+                hint for definition in definitions
+                if isinstance(hint := definition.__dict__.get("type_annotation"), TypeHint)
+            ))
             for definition in definitions:
-                if not isinstance(definition, ast.Name) or not isinstance(definition.ctx, ast.Store):
+                if not isinstance(definition, (ast.Name, ast.arg)) or (
+                    isinstance(definition, ast.Name) and not isinstance(definition.ctx, ast.Store)
+                ):
                     return TypeHint()
                 hint = definition.__dict__.get("type_annotation")
                 inferred = (
@@ -672,6 +779,19 @@ class ArgumentRenamer:
                     if isinstance(hint, TypeHint)
                     else self.destructured_hint(definition, seen)
                 )
+                # A declaration can describe an imported factory whose native
+                # implementation has no return annotation. Do not extend that
+                # contract to opaque callbacks or arbitrary local rebindings.
+                if not inferred and isinstance(definition, ast.Name):
+                    assignment = self.parents.get(definition)
+                    if isinstance(assignment, (ast.Assign, ast.AnnAssign)):
+                        value = assignment.value
+                        if (
+                            isinstance(value, ast.Constant) and value.value is None
+                        ) or (
+                            isinstance(value, ast.Call) and self.imported_path(value.func) is not None
+                        ):
+                            inferred = declared
                 if not inferred:
                     return TypeHint()
                 hints.append(inferred)
@@ -695,17 +815,27 @@ class ArgumentRenamer:
                     return destructured
             elif isinstance(definition, ast.ClassDef):
                 return self.class_hint(definition)
+            elif isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                hint = definition.__dict__.get("return_type")
+                if isinstance(hint, TypeHint):
+                    result = TypeHint(origin="awaitable", arguments=(hint,)) if isinstance(definition, ast.AsyncFunctionDef) else hint
+                    return TypeHint(origin="callable", arguments=(result,))
         target = self.binding_target(binding, set())
         return self.class_hint(target) if isinstance(target, ast.ClassDef) else TypeHint()
 
     def attribute_hint(self, node: ast.Attribute, seen: set[int]) -> TypeHint:
-        owners = self.hint_types(self.value_hint(node.value, seen), self.enclosing_class(node))
+        receiver = self.value_hint(node.value, seen)
+        owners = self.hint_types(receiver, self.enclosing_class(node))
         if not owners and isinstance(node.value, ast.Name):
             target = self.binding_target(self.bindings.get(node.value), set())
             if isinstance(target, ast.ClassDef):
                 owners = {target}
-        hints = [self.member_hint(owner, node.attr, seen) for owner in owners]
-        result = merge_hints(*hints)
+        hints = [self.member_hint(owner, node.attr, seen, receiver) for owner in owners]
+        if receiver.incomplete or any(
+            path not in self.annotation_classes and path != "types.NoneType" for path in receiver.classes
+        ):
+            hints.append(TypeHint(incomplete=True))
+        result = join_hints(hints)
         if result:
             return result
         owner = self.target(node.value, seen, instances=False)
@@ -717,24 +847,111 @@ class ArgumentRenamer:
                 return self.class_hint(target)
         return TypeHint()
 
+    def project_receiver(self, receiver: TypeHint, owner: ast.ClassDef, seen: frozenset[str] = frozenset()) -> TypeHint:
+        """Project generic arguments through syntax-derived inheritance edges."""
+        destination = self.class_hint(owner).classes
+        if receiver.classes == destination:
+            return receiver
+        candidates: list[TypeHint] = []
+        for path in receiver.classes:
+            if path in seen:
+                continue
+            source = self.annotation_classes.get(path)
+            if source is None:
+                continue
+            names = cast(tuple[str, ...], source.__dict__.get("type_parameters", ()))
+            substitutions = dict(zip(names, receiver.arguments, strict=False))
+            bases = cast(tuple[TypeHint, ...], source.__dict__.get("base_types", ()))
+            for base in bases:
+                projected = self.project_receiver(base.substituted(substitutions), owner, seen | {path})
+                if projected:
+                    candidates.append(projected)
+        if receiver.incomplete:
+            candidates.append(TypeHint(incomplete=True))
+        return join_hints(candidates)
+
+    def instantiate_member(self, hint: TypeHint, owner: ast.ClassDef, receiver: TypeHint) -> TypeHint:
+        parameters = owner.__dict__.get("type_parameters", ())
+        if isinstance(parameters, tuple) and parameters:
+            names = cast(tuple[str, ...], parameters)
+            projected = self.project_receiver(receiver, owner)
+            return hint.substituted(dict(zip(names, projected.arguments, strict=False)))
+        return hint
+
+    def instantiate_call(self, hint: TypeHint, function: ast.FunctionDef | ast.AsyncFunctionDef, call: ast.Call, seen: set[int]) -> TypeHint:
+        """Unify generic parameter shapes with actual positional/keyword values."""
+        declaring = self.parents.get(function)
+        if not function.__dict__.get("type_parameters") and not (
+            isinstance(declaring, ast.ClassDef) and declaring.__dict__.get("type_parameters")
+        ):
+            return hint
+        substitutions: dict[str, TypeHint] = {}
+
+        bound = isinstance(declaring, ast.ClassDef) and self.descriptor(function) != "staticmethod" and (
+            self.descriptor(function) == "classmethod"
+            or (isinstance(call.func, ast.Attribute) and not isinstance(self.target(call.func.value, seen, instances=False), ast.ClassDef))
+            or self.target(call.func, seen, instances=False) is declaring
+        )
+        supplied = bind_call(function.args, call, lambda expression: self.value_hint(expression, seen), bound=bound)
+        if supplied is None:
+            return hint.substituted({})
+        for parameter, actual in supplied.items():
+            template = parameter.__dict__.get("type_annotation")
+            if isinstance(template, TypeHint):
+                if template.origin is None and len(template.classes) == 1:
+                    expected = self.annotation_classes.get(template.classes[0])
+                    if expected is not None:
+                        actual = self.project_receiver(actual, expected)
+                unify_hint(template, actual, substitutions)
+        return hint.substituted(substitutions)
+
     def call_hint(self, node: ast.Call, seen: set[int]) -> TypeHint:
+        binding = self.bindings.get(node.func)
+        path = (
+            f"builtins.{getattr(binding, 'name', '')}"
+            if isinstance(cast(object, binding), BuiltinBinding)
+            else self.imported_path(node.func)
+        )
+        structural = operation_hint(node, path, lambda expression: self.value_hint(expression, seen), self.iterated_hint)
+        if structural is not None:
+            return structural
         target = self.target(node.func, seen, instances=False)
         if isinstance(target, ast.ClassDef):
-            return self.class_hint(target)
+            result = self.class_hint(target)
+            parameters = cast(tuple[str, ...], target.__dict__.get("type_parameters", ()))
+            if parameters:
+                result = TypeHint(result.classes, arguments=tuple(TypeHint((name,), origin="parameter") for name in parameters))
+                constructor = self.member_binding(target, "__init__")
+                definitions = self.definitions(constructor) if constructor is not None else []
+                if len(definitions) == 1 and isinstance(definitions[0], ast.FunctionDef):
+                    result = self.instantiate_call(result, definitions[0], node, seen)
+            return result
         if isinstance(target, (ast.FunctionDef, ast.AsyncFunctionDef)):
             hint = target.__dict__.get("return_type")
             declaring = self.parents.get(target)
             if isinstance(hint, TypeHint):
-                return self.resolved_hint(
+                result = self.resolved_hint(
                     hint, declaring if isinstance(declaring, ast.ClassDef) else None
                 )
+                result = self.instantiate_call(result, target, node, seen)
+                if isinstance(declaring, ast.ClassDef) and isinstance(node.func, ast.Attribute):
+                    result = self.instantiate_member(result, declaring, self.value_hint(node.func.value, seen))
+                decorators = {self.imported_path(decorator) for decorator in target.decorator_list}
+                if decorators & {"contextlib.contextmanager", "contextlib.asynccontextmanager"}:
+                    return TypeHint(origin="async_contextmanager" if "contextlib.asynccontextmanager" in decorators else "contextmanager", arguments=(result.iterated(),))
+                return TypeHint(origin="awaitable", arguments=(result,)) if isinstance(target, ast.AsyncFunctionDef) else result
             return TypeHint()
         if isinstance(node.func, ast.Attribute):
             receiver = self.value_hint(node.func.value, seen)
+            if receiver.origin == "mapping" and node.func.attr in {"keys", "values", "items"} and not node.args and not node.keywords:
+                key = receiver.arguments[0] if receiver.arguments else TypeHint()
+                value = receiver.element()
+                item = TypeHint(origin="tuple", arguments=(key, value)) if node.func.attr == "items" else key if node.func.attr == "keys" else value
+                return TypeHint(origin="sequence", arguments=(item,), incomplete=receiver.incomplete)
             if receiver.origin == "mapping" and node.func.attr in {"get", "pop", "setdefault"}:
                 element = receiver.element()
                 if element:
-                    return element
+                    return join_hints([element, self.value_hint(node.args[1], seen)]) if len(node.args) > 1 else element
             if receiver.origin == "sequence" and node.func.attr == "pop":
                 element = receiver.element()
                 if element:
@@ -745,6 +962,9 @@ class ArgumentRenamer:
                 and not receiver.classes
             ):
                 return receiver
+        callable_hint = self.value_hint(node.func, seen)
+        if callable_hint.origin == "callable" and callable_hint.arguments:
+            return callable_hint.arguments[-1]
         callable_owner = self.target(node.func, seen, instances=True)
         if isinstance(callable_owner, ast.ClassDef):
             binding = self.member_binding(callable_owner, "__call__")
@@ -786,6 +1006,9 @@ class ArgumentRenamer:
         return hint
 
     def _value_hint(self, node: ast.AST, seen: set[int]) -> TypeHint:
+        explicit = node.__dict__.get("expression_type")
+        if isinstance(explicit, TypeHint):
+            return self.resolved_hint(explicit, self.enclosing_class(node))
         if isinstance(node, ast.Name):
             return self.name_hint(node, seen)
         if isinstance(node, ast.Attribute):
@@ -799,17 +1022,28 @@ class ArgumentRenamer:
             return self.value_hint(node.value, seen)
         if isinstance(node, ast.Subscript):
             base_hint = self.value_hint(node.value, seen)
+            if isinstance(node.slice, ast.Slice):
+                if base_hint.origin == "tuple" and not base_hint.variadic:
+                    parts = (node.slice.lower, node.slice.upper, node.slice.step)
+                    if all(part is None or (isinstance(part, ast.Constant) and isinstance(part.value, int)) for part in parts):
+                        bounds = [part.value if isinstance(part, ast.Constant) and isinstance(part.value, int) else None for part in parts]
+                        if bounds[2] != 0:
+                            return TypeHint(origin="tuple", arguments=base_hint.arguments[slice(*bounds)], incomplete=base_hint.incomplete)
+                return base_hint
             index = (
                 node.slice.value
                 if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
                 else None
             )
             element = base_hint.element(index)
-            return element or base_hint
+            if base_hint.origin in {"sequence", "mapping", "tuple", "awaitable"}:
+                return element
+            indexed = self.protocol_hint(base_hint, "__getitem__")
+            return indexed or element
         if isinstance(node, ast.IfExp):
-            return merge_hints(self.value_hint(node.body, seen), self.value_hint(node.orelse, seen))
+            return join_hints([self.value_hint(node.body, seen), self.value_hint(node.orelse, seen)])
         if isinstance(node, ast.BoolOp):
-            return merge_hints(*(self.value_hint(value, seen) for value in node.values))
+            return join_hints([self.value_hint(value, seen) for value in node.values])
         if isinstance(node, ast.Tuple):
             return TypeHint(
                 origin="tuple",
@@ -819,12 +1053,12 @@ class ArgumentRenamer:
             return TypeHint(
                 origin="sequence",
                 arguments=(
-                    merge_hints(*(
-                        self.value_hint(element.value, seen).iterated()
+                    join_hints([
+                        self.iterated_hint(self.value_hint(element.value, seen))
                         if isinstance(element, ast.Starred)
                         else self.value_hint(element, seen)
                         for element in node.elts
-                    )),
+                    ]),
                 ),
             )
         if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
@@ -838,8 +1072,18 @@ class ArgumentRenamer:
                 arguments=(self.value_hint(node.key, seen), self.value_hint(node.value, seen)),
             )
         if isinstance(node, ast.Dict):
-            keys = merge_hints(*(self.value_hint(key, seen) for key in node.keys))
-            values = merge_hints(*(self.value_hint(value, seen) for value in node.values))
+            key_hints: list[TypeHint] = []
+            value_hints: list[TypeHint] = []
+            for key, value in zip(node.keys, node.values, strict=True):
+                if key is None:
+                    expanded = self.value_hint(value, seen)
+                    key_hints.append(expanded.iterated() if expanded.origin == "mapping" else TypeHint(incomplete=True))
+                    value_hints.append(expanded.element() if expanded.origin == "mapping" else TypeHint(incomplete=True))
+                else:
+                    key_hints.append(self.value_hint(key, seen))
+                    value_hints.append(self.value_hint(value, seen))
+            keys = join_hints(key_hints)
+            values = join_hints(value_hints)
             return TypeHint(origin="mapping", arguments=(keys, values))
         return TypeHint()
 
@@ -860,7 +1104,10 @@ class ArgumentRenamer:
         if isinstance(node, ast.Lambda):
             return node
         if isinstance(node, ast.Attribute):
-            owners = self.type_targets(node.value, seen)
+            receiver_hint = self.value_hint(node.value, seen)
+            if receiver_hint.incomplete:
+                return None
+            owners = self.hint_types(receiver_hint, self.enclosing_class(node.value))
             if owners:
                 targets: list[ast.AST | str] = []
                 for inferred_owner in owners:

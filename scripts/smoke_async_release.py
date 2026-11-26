@@ -1,6 +1,7 @@
 """Exercise the real serving entrypoint against disposable loopback dependencies.
 
-Use --binary for Nuitka acceptance or --checkout for the same runtime in CI.
+Use --binary for Nuitka acceptance, --source for flattened Python output,
+or --checkout for the same runtime in CI.
 No production state, panel, Redis instance or Telegram credentials are used.
 """
 
@@ -24,6 +25,8 @@ from aiohttp import web
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+__all__: list[str] = []
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "smoke-panel-token-not-a-production-secret"  # ruff: ignore[hardcoded-password-string] - disposable fixture
@@ -342,6 +345,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--binary", type=Path)
+    group.add_argument("--source", type=Path, help="Exercise a generated app.min.py with this interpreter")
     group.add_argument("--checkout", action="store_true")
     parser.add_argument("--report", type=Path, help="Verify async modules in a Nuitka XML report")
     args = parser.parse_args()
@@ -370,7 +374,14 @@ def main() -> None:
         }
         if packaged := internal & modules:
             raise RuntimeError(f"Nuitka report contains internal modules: {sorted(packaged)}")
-    command = [sys.executable, "-m", "main"] if args.checkout else [str(args.binary.resolve())]
+    if args.checkout:
+        command = [sys.executable, "-m", "main"]
+    elif args.source is not None:
+        if not args.source.is_file():
+            parser.error(f"source file does not exist: {args.source}")
+        command = [sys.executable, str(args.source.resolve())]
+    else:
+        command = [str(args.binary.resolve())]
     with TemporaryDirectory(prefix="vpn-sub-smoke-") as temporary:
         asyncio.run(smoke(command, Path(temporary), checkout=args.checkout))
     print("async release smoke passed: panel/Redis/SQLite/frontend, SIGTERM and restart")
