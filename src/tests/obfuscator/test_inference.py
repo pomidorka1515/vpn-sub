@@ -603,6 +603,87 @@ __result__ = Record().close()
     assert "f:Record:close*" in names
 
 
+def test_custom_awaitable_generator_return_preserves_external_receiver() -> None:
+    source = """
+import aiosqlite
+class Record:
+    def close(self): return 7
+async def connect():
+    conn = await aiosqlite.connect(':memory:')
+    try:
+        return conn
+    except BaseException:
+        await conn.close()
+        raise
+__result__ = Record().close(), connect
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["f:Record:close*"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture; no database is opened.
+    assert namespace["__result__"][0] == 7
+    assert ".close()" in result.source
+
+
+@pytest.mark.parametrize(("return_type", "succeeds"), [("External", True), ("Any", False)])
+def test_custom_awaitable_uses_generator_return_not_yield_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, return_type: str, succeeds: bool,
+) -> None:
+    path = tmp_path / "awaitable_fixture.py"
+    path.write_text(f"""
+from collections.abc import Generator
+from typing import Any
+class External: pass
+class Pending:
+    def __await__(self) -> Generator[int, None, {return_type}]:
+        raise NotImplementedError
+class Unknown:
+    def __await__(self) -> Generator[int, None, Any]:
+        raise NotImplementedError
+def make() -> Pending: return Pending()
+def make_unknown() -> Unknown: return Unknown()
+""", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("awaitable_fixture", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    tree = ast.parse("""
+import awaitable_fixture
+async def run(pending: awaitable_fixture.Pending):
+    return await pending
+""")
+    AnnotationIndex("main", tree).apply()
+    analysis = AllowlistRenamer(tree)
+    awaited = next(node for node in ast.walk(tree) if isinstance(node, ast.Await))
+    hint = analysis.attribute_flow.external_returns.hint(awaited)
+    if succeeds:
+        assert hint.classes == ("awaitable_fixture.External",)
+    else:
+        assert not hint
+    source = """
+import awaitable_fixture
+class Record:
+    def close(self): return 7
+async def run():
+    value = await awaitable_fixture.make()
+    value.close()
+__result__ = Record().close(), run
+"""
+    if succeeds:
+        result, _ = allowlisted(source, ["f:Record:close*"])
+        assert "value.close()" in result
+    else:
+        with pytest.raises(ValueError, match="Unresolved receiver"):
+            allowlisted(source, ["f:Record:close*"])
+    mixed = source.replace(
+        "await awaitable_fixture.make()",
+        "await (awaitable_fixture.make() if flag else awaitable_fixture.make_unknown())",
+    )
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        allowlisted(mixed, ["f:Record:close*"])
+
+
 def test_external_factory_can_delegate_to_native_file_open() -> None:
     source = """
 from pathlib import Path
@@ -619,6 +700,67 @@ __result__ = Record().close()
 """
     result, _ = allowlisted(source, ["f:Record:close*"])
     assert "handle.close()" in result
+
+
+@pytest.mark.parametrize("mode", ["rb", "r"])
+def test_external_stub_methods_follow_file_context_results(mode: str) -> None:
+    source = f"""
+from pathlib import Path
+class Record:
+    def count(self): return 7
+def read(path):
+    with Path(path).open({mode!r}) as handle:
+        chunk = handle.read(100)
+        return chunk.count('x' if {mode!r} == 'r' else b'x')
+__result__ = Record().count(), read
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["f:Record:count*"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture; no file is opened.
+    assert namespace["__result__"][0] == 7
+    assert ".count(" in result.source
+
+
+def test_external_stub_overload_unknown_argument_is_not_guessed() -> None:
+    source = """
+from pathlib import Path
+class Record:
+    def count(self): return 7
+def read(path, mode):
+    with Path(path).open(mode) as handle:
+        chunk = handle.read(100)
+        return chunk.count('x')
+__result__ = Record().count(), read
+"""
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        allowlisted(source, ["f:Record:count*"])
+
+
+def test_external_stub_does_not_bypass_python_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "stub_override_fixture.py"
+    path.write_text("""
+import io
+class Custom(io.BytesIO):
+    def read(self, size=-1): return opaque()
+def make() -> Custom: return Custom()
+""", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("stub_override_fixture", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    source = """
+import stub_override_fixture
+class Record:
+    def count(self): return 7
+def read():
+    chunk = stub_override_fixture.make().read()
+    return chunk.count()
+__result__ = Record().count(), read
+"""
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        allowlisted(source, ["f:Record:count*"])
 
 
 def test_native_factory_and_transparent_context_wrapper_compose() -> None:

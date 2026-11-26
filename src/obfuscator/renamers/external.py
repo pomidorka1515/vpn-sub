@@ -7,6 +7,7 @@ import re
 import typing
 from abc import ABCMeta
 from collections import deque
+from dataclasses import replace
 from importlib import import_module
 from textwrap import dedent
 from types import (
@@ -196,7 +197,7 @@ class ExternalReturns:
             return TypeHint(origin="awaitable", arguments=(hint,))
         return hint
 
-    def method(self, receiver: TypeHint, name: str) -> TypeHint:
+    def method(self, receiver: TypeHint, name: str, *, call: ast.Call | None = None) -> TypeHint:
         if receiver.self_reference or receiver.incomplete:
             return TypeHint()
         if name == "copy" and receiver.classes == ("builtins.dict",):
@@ -206,7 +207,9 @@ class ExternalReturns:
             owner = self.resolve(path)
             if not isinstance(owner, type):
                 return TypeHint()
-            hints.append(self.returned(_static_member(owner, name, None), receiver, owner))
+            member = _static_member(owner, name, None)
+            stub = self.stubs.method(owner, name, call, receiver, overloaded_only=isinstance(member, FunctionType)) if member is not None else TypeHint()
+            hints.append(stub or self.returned(member, receiver, owner, call=call))
         return merge_hints(*hints) if all(hints) else TypeHint()
 
     def hint(self, node: ast.expr, seen: frozenset[ast.AST] = frozenset()) -> TypeHint:
@@ -391,7 +394,7 @@ class ExternalReturns:
     def expression(self, node: ast.expr, seen: frozenset[ast.AST]) -> TypeHint:
         if isinstance(node.__dict__.get("expression_type"), TypeHint):
             return self.normalize(self.analysis.value_hint(node))
-        if not isinstance(node, (ast.Name, ast.IfExp)):
+        if not isinstance(node, (ast.Name, ast.IfExp, ast.Await)):
             hint = self.analysis.value_hint(node)
             if _complete_hint(hint):
                 return self.normalize(hint)
@@ -400,8 +403,23 @@ class ExternalReturns:
             if awaited.origin == "awaitable":
                 return awaited.element()
             # Custom awaitables must supply their own annotated protocol result.
-            protocol = self.method(awaited, "__await__")
-            return protocol.element() if protocol.origin == "awaitable" else TypeHint()
+            if awaited.incomplete or awaited.self_reference or not awaited.classes:
+                return TypeHint()
+            results: list[TypeHint] = []
+            for awaited_path in awaited.classes:
+                protocol = self.method(replace(awaited, classes=(awaited_path,)), "__await__")
+                if protocol.origin == "awaitable":
+                    result = protocol.element()
+                # A Generator's third argument is its return value, not a
+                # value yielded while driving the iterator.
+                elif protocol.classes == ("collections.abc.Generator",) and len(protocol.arguments) == 3 and not protocol.incomplete:
+                    result = protocol.arguments[2]
+                else:
+                    return TypeHint()
+                if not result or result.incomplete:
+                    return TypeHint()
+                results.append(result)
+            return merge_hints(*results)
         if isinstance(node, ast.NamedExpr):
             return self.hint(node.value, seen)
         if isinstance(node, ast.Attribute):
@@ -432,7 +450,7 @@ class ExternalReturns:
             if imported is not None:
                 return self.returned(imported, call=node)
             if isinstance(node.func, ast.Attribute):
-                return self.method(self.hint(node.func.value, seen), node.func.attr)
+                return self.method(self.hint(node.func.value, seen), node.func.attr, call=node)
         if isinstance(node, ast.Name):
             binding = self.analysis.bindings.get(node)
             definitions: list[ast.AST] = self.analysis.definitions(binding) if binding is not None else []

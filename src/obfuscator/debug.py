@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import cast
@@ -48,7 +47,7 @@ def _surviving_definitions(tree: ast.Module) -> list[Definition]:
     return [originals[node] for node in _definitions(shadow)]
 
 
-def annotate_debug(source: str, tree: ast.Module, entries: list[str], filename: str) -> str:
+def annotate_debug(source: str, tree: ast.Module, filename: str) -> str:
     """Insert comments into minified text without rewriting any executable text."""
     lines = source.splitlines(keepends=True)
     comments: dict[int, list[str]] = {}
@@ -105,7 +104,7 @@ def annotate_debug(source: str, tree: ast.Module, entries: list[str], filename: 
                     cast(str, argument.__dict__.get("original_name", argument.arg)),
                 )
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
-    output = [f"# {filename} {timestamp}\n", f"# allowlist used {json.dumps(entries)}\n"]
+    output = [f"# {filename} {timestamp}\n"]
     for number, line in enumerate(lines, 1):
         output.extend(comments.get(number, []))
         output.append(line)

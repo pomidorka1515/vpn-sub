@@ -317,7 +317,7 @@ bounds a stuck stop.
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
 `app.min.py` in an existing output directory; unrelated files are left intact.
-Use `-d` / `--debug` to add a timestamp, the allowlist used, and original-name
+Use `-d` / `--debug` to add a timestamp and original-name
 comments for renamed classes, functions (including methods), arguments, and
 class-scoped attributes. Variable names are omitted. Debug output adds only
 comments to the normal minified output; executable text is unchanged.
@@ -422,6 +422,8 @@ without treating them as arbitrary attribute consumers. External return annotati
 receivers through imported constructors/functions, method calls, assignments, and
 sync/async context managers. Async function results and annotated awaitables are
 unwrapped at `await`; generic context-manager parameters and `Self` are retained.
+Custom external awaitables can also declare their result as the return parameter
+of an annotated `Generator` returned by `__await__`; unknown results remain unknown.
 Annotations are read as syntax, not evaluated, and external APIs are never called
 to infer their results. Missing or unsupported annotations and unknown union
 alternatives still fail closed for same-spelled fields. Ordinary exception handlers
@@ -472,6 +474,9 @@ Native functions can use the stdlib stubs bundled with the pinned development
 `mypy` dependency: stubs are parsed, not imported, and every overload compatible
 with the supplied argument names/count must have a known result. Missing stubs,
 unsupported generic returns, recursive or opaque source paths remain unknown.
+For external methods, statically proven literal arguments can select a stub
+overload in declaration order; native inherited method and context-manager results
+also follow stub annotations. Unmatched or uncertain alternatives are not guessed.
 Transparent `contextlib` closing/null contexts preserve their wrapped type.
 External bases are resolved through installed imports (including aliases and generic
 subscriptions) without constructing instances or evaluating base expressions. Their

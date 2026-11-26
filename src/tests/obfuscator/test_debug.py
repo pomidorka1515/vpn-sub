@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import re
 import subprocess
 import sys
@@ -40,7 +39,8 @@ __result__ = calculate(value=record._read(increment=3))
     assert _without_comments(debug.source) == normal.source
     assert ast.dump(ast.parse(debug.source)) == ast.dump(ast.parse(normal.source))
     assert re.match(r"# app\.min\.py \d{4}-\d{2}-\d{2} \d{2}:\d{2}\n", debug.source)
-    assert debug.source.splitlines()[1] == f"# allowlist used {json.dumps(entries)}"
+    assert "# allowlist used" not in debug.source
+    assert all(entry not in debug.source for entry in entries)
     for kind, original in (
         ("class", "Record"),
         ("func", "_read"),
@@ -127,7 +127,7 @@ def test_debug_handles_compact_classes_decorators_and_nested_async_functions() -
             node.__dict__["original_name"] = f"original_{node.name}"
         elif isinstance(node, ast.arg):
             node.__dict__["original_name"] = f"original_{node.arg}"
-    debug = annotate_debug(source, tree, [], "app.min.py")
+    debug = annotate_debug(source, tree, "app.min.py")
     assert _without_comments(debug) == source
     assert "class A:x=1\n\t# attr x original_field\n" in debug
     assert "# func outer original_outer\n" in debug
@@ -162,7 +162,7 @@ def test_cli_debug_flag(tmp_path: Path, flag: str) -> None:
     )
     result = (output / "app.min.py").read_text(encoding="utf-8")
     assert result.startswith("# app.min.py ")
-    assert "# allowlist used []\n" in result
+    assert "# allowlist used" not in result
     namespace: dict[str, Any] = {}
     exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     assert namespace["__result__"] == 42

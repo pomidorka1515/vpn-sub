@@ -207,7 +207,7 @@ def _obfuscate_modules(
             "app.min.py",
             rename_globals=True,
             executor=executor,
-            debug_entries=entries if debug else None,
+            debug=debug,
         ),
         renames=renames,
         renamed_parameters=renamed_parameters,
@@ -261,7 +261,7 @@ def minify_tree(
     rename_globals: bool = False,
     rename_locals: bool = True,
     executor: ProcessPoolExecutor | None = None,
-    debug_entries: list[str] | None = None,
+    debug: bool = False,
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
     minify_sql_literals(tree, executor=executor)
@@ -310,8 +310,8 @@ def minify_tree(
     )
     compile(result, filename, "exec")
     result += "\n"
-    if debug_entries is not None:
-        result = annotate_debug(result, tree, debug_entries, filename)
+    if debug:
+        result = annotate_debug(result, tree, filename)
     return result
 
 
