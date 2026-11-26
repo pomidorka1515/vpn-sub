@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Self
 
 import discord
+
 from bots.discord.composition import PublicFeatureMixin
 from util import isusername
 

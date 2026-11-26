@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock
 
+import discord
 import pytest
 
-import discord
 from errors import CommittedAuditError
 from tests.support.discord import FakeInteraction, make_bots, modal_data
 

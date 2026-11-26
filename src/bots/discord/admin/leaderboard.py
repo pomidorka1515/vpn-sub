@@ -4,6 +4,7 @@ import operator
 from typing import TYPE_CHECKING, Literal, cast
 
 import discord
+
 from bots.discord.composition import AdminFeatureMixin
 from chart import leaderboard_chart
 from util import fmt_bytes, truncate_utf8

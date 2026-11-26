@@ -8,6 +8,7 @@ from bots.discord.exceptions import SessionExpiredError
 
 if TYPE_CHECKING:
     import discord
+
     from bots.discord.payloads import ResponseOptions
 
 __all__ = ["DiscordIOMixin"]

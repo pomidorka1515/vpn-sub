@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     import asyncio
 
     import discord
+    from discord import app_commands
+
     from app_runtime.offload import BoundedOffload
     from app_runtime.rate_limit import AsyncRateLimiter
     from bots.discord.public.account import PendingConfirmation
@@ -16,7 +18,6 @@ if TYPE_CHECKING:
     from config import AppConfig, DiscordLangConfig
     from core import Subscription
     from core.common import Snapshot
-    from discord import app_commands
     from loggers import Logger
 
     class PublicFeatureMixin:
