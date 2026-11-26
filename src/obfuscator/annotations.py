@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 from dataclasses import dataclass, replace
 
 __all__: list[str] = ["AnnotationIndex", "TypeHint", "merge_hints"]
@@ -172,10 +173,25 @@ class AnnotationIndex:
         self.is_package = is_package
         self.names: dict[str, str] = {}
         self.class_paths: set[str] = set()
+        self.assigned_names: set[str] = {
+            node.id for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+        }
         self._collect_names(tree.body)
 
     def apply(self) -> None:
         self._assign_class_paths()
+        # Keep syntax-derived alias targets after cleanup erases their runtime
+        # bindings. Include imported/re-exported names for cross-module aliases.
+        aliases = {
+            f"{self.module}.{name}": TypeHint((path,))
+            for name, path in self.names.items()
+            if path != f"{self.module}.{name}"
+        }
+        for statement in self.tree.body:
+            if isinstance(statement, ast.TypeAlias):
+                aliases[f"{self.module}.{statement.name.id}"] = self._alias_hint(statement.value)
+        self.tree.__dict__["annotation_aliases"] = aliases
         self._attach_hints(self.tree, None, None, direct_class_body=False)
 
     def _collect_names(self, statements: list[ast.stmt]) -> None:
@@ -188,9 +204,8 @@ class AnnotationIndex:
             if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if isinstance(statement, ast.TypeAlias):
-                path = self._path(statement.value)
-                if path is not None:
-                    self.names.setdefault(statement.name.id, path)
+                path: str | None = self._path(statement.value) or f"{self.module}.{statement.name.id}"
+                self.names.setdefault(statement.name.id, path)
             elif isinstance(statement, ast.Import):
                 for alias in statement.names:
                     if alias.asname:
@@ -310,6 +325,12 @@ class AnnotationIndex:
         if argument.annotation is not None:
             argument.__dict__["type_annotation"] = self._hint(argument.annotation)
 
+    def hint(self, node: ast.expr) -> TypeHint:
+        """Read a source annotation, including a protocol base marker."""
+        if self._path(node) in {"typing.Protocol", "typing_extensions.Protocol"}:
+            return TypeHint(origin="protocol")
+        return self._hint(node)
+
     def _hint(self, node: ast.expr) -> TypeHint:
         if isinstance(node, ast.Constant):
             if node.value is None:
@@ -387,6 +408,17 @@ class AnnotationIndex:
         if isinstance(node, ast.IfExp):
             return _merge_alternatives(self._hint(node.body), self._hint(node.orelse))
         return TypeHint()
+
+    def _alias_hint(self, node: ast.expr) -> TypeHint:
+        """Retain an alias's outer runtime type as well as its container shape."""
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            return _merge_alternatives(self._alias_hint(node.left), self._alias_hint(node.right))
+        hint = self._hint(node)
+        base = node.value if isinstance(node, ast.Subscript) else node
+        if isinstance(base, ast.Name) and base.id not in self.names and base.id not in self.assigned_names:
+            if isinstance(vars(builtins).get(base.id), type):
+                return replace(hint, classes=(f"builtins.{base.id}",))
+        return hint
 
     def _slice_elements(self, node: ast.expr) -> list[ast.expr]:
         return list(node.elts) if isinstance(node, ast.Tuple) else [node]

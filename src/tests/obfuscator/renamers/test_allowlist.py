@@ -63,6 +63,73 @@ __result__ = before, hasattr(record, '_stored')
 
 
 @pytest.mark.parametrize("star", ["", "*"])
+@pytest.mark.parametrize("descriptor", ["@property\n    ", ""])
+def test_allowlisted_member_overlaps_unrelated_instance_field(star: str, descriptor: str) -> None:
+    source = f"""
+class Record:
+    {descriptor}def value(self): return 7
+class Other:
+    def __init__(self): self.value = 3
+    def read(self):
+        alias = self
+        alias.value += 1
+        return alias.value
+record = Record()
+other = Other()
+__result__ = record.value{'' if descriptor else '()'}, other.read(), other.value
+"""
+    result, names = allowlisted(source, [f"f:Record:value{star}"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 4, 4)
+    assert "other.value" in result
+    assert "self.value=3" in result
+    assert f"f:Record:value{star}" in names
+
+
+@pytest.mark.parametrize("receiver", ["unknown", "record if flag else other"])
+def test_allowlisted_member_overlap_uncertain_receiver_fails_closed(receiver: str) -> None:
+    source = f"""
+class Record:
+    @property
+    def value(self): return 7
+class Other:
+    def __init__(self): self.value = 3
+record = Record()
+other = Other()
+selected = {receiver}
+__result__ = selected.value
+"""
+    with pytest.raises(ValueError, match=r"Unresolved|Ambiguous"):
+        allowlisted(source, ["f:Record:value"])
+
+
+@pytest.mark.parametrize(
+    ("name", "container", "usage"),
+    [
+        ("append", "[]", "items.append(record)"),
+        ("get", "{}", "items.get('key')"),
+        ("add", "set()", "items.add(record)"),
+    ],
+)
+def test_allowlisted_member_overlaps_container_method(name: str, container: str, usage: str) -> None:
+    source = f"""
+class Record:
+    @property
+    def {name}(self): return 7
+record = Record()
+items = {container}
+{usage}
+__result__ = record.{name}, len(items)
+"""
+    result, _ = allowlisted(source, [f"f:Record:{name}"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 0 if name == "get" else 1)
+    assert f"items.{name}" in result
+
+
+@pytest.mark.parametrize("star", ["", "*"])
 def test_allowlist_properties_with_same_name_stay_separate(star: str) -> None:
     source = """
 class First:
@@ -88,6 +155,67 @@ __result__ = first.value, second.value
     assert "second.value" in result
     assert "first.value" not in result
     assert f"f:First:value{star}" in names
+
+
+@pytest.mark.parametrize("jobs", [1, 2])
+def test_allowlisted_method_overlaps_imported_container_alias(jobs: int) -> None:
+    modules = {
+        Path("schemas.py"): "type Document = dict[str, object]\ntype Alias = Document\n",
+        Path("exports.py"): "from schemas import Alias as WorkingDocument\n",
+        Path("main.py"): """
+from copy import deepcopy
+from exports import WorkingDocument
+class Record:
+    def clear(self): return 7
+class Transaction:
+    def __init__(self): self.data = deepcopy({'key': 3})
+    def active(self) -> WorkingDocument: return self.data
+    def clear(self): self.active().clear()
+record = Record()
+transaction = Transaction()
+transaction.clear()
+__result__ = record.clear(), len(transaction.active())
+""",
+    }
+    result = obfuscate_modules(modules, ["f:Record:clear"], jobs=jobs)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 0)
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ["Record | dict[str, object]", "Unknown | dict[str, object]", "Document"],
+)
+def test_container_alias_uncertainty_still_fails_closed(alias: str) -> None:
+    source = f"""
+from copy import deepcopy
+type Document = {alias}
+class Record:
+    def clear(self): return 7
+class Other:
+    def active(self) -> Document: return deepcopy({{}})
+    def clear(self): self.active().clear()
+__result__ = Record().clear(), Other().clear()
+"""
+    with pytest.raises(ValueError, match=r"Unresolved|Ambiguous"):
+        allowlisted(source, ["f:Record:clear"])
+
+
+def test_container_alias_does_not_assume_shadowed_builtin() -> None:
+    source = """
+from copy import deepcopy
+dict = unknown
+type Document = dict[str, object]
+class Record:
+    def clear(self): return 7
+class Other:
+    def active(self) -> Document: return deepcopy({})
+    def clear(self): self.active().clear()
+__result__ = Record().clear(), Other().clear()
+"""
+    with pytest.raises(ValueError, match="Unresolved"):
+        allowlisted(source, ["f:Record:clear"])
 
 
 def test_allowlist_getter_only_property_parameters() -> None:

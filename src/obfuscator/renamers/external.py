@@ -12,7 +12,7 @@ from textwrap import dedent
 from types import FunctionType, GetSetDescriptorType, MemberDescriptorType, ModuleType, UnionType
 from typing import TYPE_CHECKING, cast, get_args, get_origin, is_typeddict
 
-from ..annotations import TypeHint, merge_hints
+from ..annotations import AnnotationIndex, TypeHint, merge_hints
 
 if TYPE_CHECKING:
     from ..analysis import Binding
@@ -49,6 +49,7 @@ class ExternalReturns:
         self.annotations: dict[object, ast.expr | None] = {}
         self.paths: dict[str, TypeHint] = {}
         self.objects: dict[str, object] = {}
+        self.sources: dict[str, tuple[AnnotationIndex, dict[str, ast.expr | ast.ClassDef | None]]] = {}
         self.statement_positions: dict[ast.FunctionDef | ast.AsyncFunctionDef, dict[ast.stmt, int]] = {}
 
     def resolve(self, path: str) -> object:
@@ -185,14 +186,65 @@ class ExternalReturns:
             self.cache[node] = result
         return result
 
-    def normalize(self, hint: TypeHint) -> TypeHint:
+    def declared(self, path: str, seen: frozenset[str] = frozenset()) -> TypeHint:
+        """Read an imported global's declared type, never its proxied value."""
+        if path in seen:
+            return TypeHint()
+        seen |= {path}
+        module_name, _, name = path.rpartition(".")
+        if module_name not in self.sources:
+            module = import_module(module_name)
+            tree = ast.parse(inspect.getsource(module))
+            index = AnnotationIndex(module_name, tree, is_package=hasattr(module, "__path__"))
+            declarations: dict[str, ast.expr | ast.ClassDef | None] = {}
+            pending = list(tree.body)
+            while pending:
+                statement = pending.pop()
+                if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                    declarations[statement.target.id] = statement.annotation if statement.target.id not in declarations else None
+                elif isinstance(statement, ast.ClassDef):
+                    declarations[statement.name] = statement if statement.name not in declarations else None
+                elif isinstance(statement, ast.If):
+                    pending.extend((*statement.body, *statement.orelse))
+                elif isinstance(statement, ast.Try):
+                    pending.extend((*statement.body, *statement.orelse, *statement.finalbody))
+                    for handler in statement.handlers:
+                        pending.extend(handler.body)
+            self.sources[module_name] = index, declarations
+        index, declarations = self.sources[module_name]
+        declaration = declarations.get(name)
+        if isinstance(declaration, ast.ClassDef):
+            if declaration.decorator_list or declaration.keywords:
+                return TypeHint()
+            bases = [index.hint(base.value if isinstance(base, ast.Subscript) else base) for base in declaration.bases]
+            if any(base.origin == "protocol" for base in bases):
+                return TypeHint(origin="protocol")
+            parents = [self.normalize(base, seen) for base in bases]
+            if not parents or not all(parents):
+                return TypeHint()
+            concrete = [parent for parent in parents if parent.origin != "protocol"]
+            return merge_hints(*concrete)
+        if declaration is not None:
+            return self.normalize(index.hint(declaration), seen)
+        if name in declarations:
+            return TypeHint()
+        target = index.names.get(name)
+        return self.declared(target, seen) if target is not None else TypeHint()
+
+    def normalize(self, hint: TypeHint, seen: frozenset[str] = frozenset()) -> TypeHint:
         """Expand imported alias objects without evaluating annotation expressions."""
         if hint.incomplete:
             return TypeHint()
         if not hint.classes or hint.origin is not None:
             return hint
         hints: list[TypeHint] = []
+        aliases: dict[str, TypeHint] = self.analysis.tree.__dict__.get("annotation_aliases", {})
         for path in hint.classes:
+            if path in aliases:
+                if path in seen:
+                    return TypeHint()
+                hints.append(self.normalize(aliases[path], seen | {path}))
+                continue
             if path in self.analysis.annotation_classes:
                 hints.append(TypeHint((path,)))
                 continue
@@ -200,13 +252,14 @@ class ExternalReturns:
                 try:
                     self.paths[path] = self.runtime_hint(self.resolve(path))
                 except (ImportError, AttributeError, ValueError):
-                    self.paths[path] = TypeHint()
+                    self.paths[path] = self.declared(path, seen)
             hints.append(self.paths[path])
         if not all(hints):
             return TypeHint()
         result = merge_hints(*hints)
         return TypeHint(
-            result.classes, hint.self_reference, arguments=hint.arguments or result.arguments
+            result.classes, hint.self_reference, origin=result.origin,
+            arguments=hint.arguments or result.arguments, variadic=result.variadic,
         )
 
     def reaching_local(
@@ -303,6 +356,9 @@ class ExternalReturns:
             if len(definitions) != 1:
                 return TypeHint()
             definition = definitions[0]
+            if isinstance(definition, ast.alias):
+                path = self.analysis.imported_path(node)
+                return self.declared(path) if path is not None else TypeHint()
             annotation = definition.__dict__.get("type_annotation")
             if isinstance(annotation, TypeHint):
                 return self.normalize(annotation)

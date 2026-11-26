@@ -848,6 +848,10 @@ class AllowlistRenamer(ArgumentRenamer):
                     receiver = flow.value(node.value)
                     flow_owners = set(receiver.owners)
                     if not flow_owners:
+                        # Tracked containers are not unresolved application
+                        # instances, regardless of their contained values.
+                        if receiver.containers and not receiver.unknown:
+                            continue
                         if node.attr not in member_families:
                             member_families[node.attr] = {
                                 owner for owner in self.classes if self.member(owner, node.attr) in watched
@@ -855,14 +859,23 @@ class AllowlistRenamer(ArgumentRenamer):
                         if flow.unrelated(node.value, member_families[node.attr]):
                             continue
                     members = {self.member(owner, node.attr) for owner in flow_owners}
+                    # Instance fields have no class member binding. A fully
+                    # resolved receiver outside the watched members is still
+                    # unrelated, even when its field has the same spelling.
+                    if flow_owners and not receiver.unknown and members.isdisjoint(watched):
+                        continue
                     if receiver.unknown or not members or None in members:
                         raise ValueError(f"Unresolved receiver for allowlisted attribute {flow.describe(node)}")
                     targets = {member for member in members if member is not None}
                 affected = targets & watched
                 if affected:
-                    if len(targets) != 1:
-                        raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
                     owners = self.receiver(node.value)[0] if flow_owners is None else flow_owners
+                    if len(targets) != 1 or any(
+                        self.member(owner, node.attr) is None
+                        and any((id(base), node.attr) in self.instance_assignments for base in self.mro(owner))
+                        for owner in owners
+                    ):
+                        raise ValueError(f"Ambiguous polymorphic attribute {ast.unparse(node)!r}")
                     for owner in owners:
                         self.check_receiver(owner, node.attr)
                     member_binding = next(iter(affected))

@@ -9,8 +9,125 @@ import pytest
 
 from obfuscator.pipeline import obfuscate_modules
 from obfuscator.renamers.allowlist import AllowlistRenamer
+from tests.support.obfuscator import allowlisted
 
 __all__: list[str] = []
+
+
+def test_imported_global_type_only_proxy_is_not_dereferenced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "declared_global_fixture.py").write_text("""
+from __future__ import annotations
+from typing import TYPE_CHECKING, Protocol
+class Actual: pass
+if TYPE_CHECKING:
+    class Interface[T](Protocol): pass
+    class Declared(Interface[Actual], Actual): pass
+class Opaque:
+    def __getattribute__(self, name): raise AssertionError('proxy was dereferenced')
+handle: Declared = Opaque()
+""", encoding="utf-8")
+    (tmp_path / "exported_global_fixture.py").write_text(
+        "from declared_global_fixture import handle as exported\n", encoding="utf-8",
+    )
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    source = """
+from exported_global_fixture import exported as handle
+class Record:
+    @property
+    def value(self): return 7
+def read_external(): return handle.value
+__result__ = Record().value
+"""
+    try:
+        result, _ = allowlisted(source, ["f:Record:value"])
+        assert "handle.value" in result
+        namespace: dict[str, Any] = {}
+        exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+        assert namespace["__result__"] == 7
+    finally:
+        sys.modules.pop("declared_global_fixture", None)
+        sys.modules.pop("exported_global_fixture", None)
+
+
+def test_quart_request_proxy_annotation_is_unrelated() -> None:
+    source = """
+from quart import request
+class Record:
+    @property
+    def path(self): return 7
+def read_request(): return request.path
+__result__ = Record().path
+"""
+    result, _ = allowlisted(source, ["f:Record:path"])
+    assert "request.path" in result
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+@pytest.mark.parametrize("declaration", [
+    "class Declared(Actual, Unknown): pass",
+    "class Declared(Declared): pass",
+    "class Declared(Protocol): pass",
+    "Declared = Actual | Unknown",
+    "class Declared(Actual, metaclass=Unknown): pass",
+    "@unknown\n    class Declared(Actual): pass",
+    "class Declared(Actual): pass\n    class Declared(Unknown): pass",
+])
+def test_imported_global_uncertain_type_still_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declaration: str,
+) -> None:
+    (tmp_path / "uncertain_global_fixture.py").write_text(f"""
+from __future__ import annotations
+from typing import TYPE_CHECKING, Protocol
+class Actual: pass
+if TYPE_CHECKING:
+    {declaration}
+handle: Declared = object()
+""", encoding="utf-8")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    source = """
+from uncertain_global_fixture import handle
+class Record:
+    @property
+    def value(self): return 7
+def read_external(): return handle.value
+__result__ = Record().value
+"""
+    try:
+        with pytest.raises(ValueError, match="Unresolved"):
+            allowlisted(source, ["f:Record:value"])
+    finally:
+        sys.modules.pop("uncertain_global_fixture", None)
+
+
+def test_imported_global_related_base_still_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "related_global_fixture.py").write_text("""
+from __future__ import annotations
+from typing import TYPE_CHECKING
+class Actual: pass
+if TYPE_CHECKING:
+    class Declared(Actual): pass
+handle: Declared = object()
+""", encoding="utf-8")
+    monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+    source = """
+from related_global_fixture import Actual, handle
+class Record(Actual):
+    @property
+    def value(self): return 7
+def read_external(): return handle.value
+__result__ = Record().value
+"""
+    try:
+        with pytest.raises(ValueError, match="Unresolved"):
+            allowlisted(source, ["f:Record:value"])
+    finally:
+        sys.modules.pop("related_global_fixture", None)
 
 
 @pytest.mark.parametrize("base", [

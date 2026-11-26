@@ -1134,7 +1134,7 @@ class AttributeFlow:
         if self.imported_namespace(node):
             return True
         hint = self.external_returns.hint(node)
-        if not hint.classes or hint.origin is not None or hint.self_reference or hint.incomplete:
+        if not hint.classes or hint.self_reference or hint.incomplete:
             return False
         for path in hint.classes:
             if path in self.analysis.annotation_classes:

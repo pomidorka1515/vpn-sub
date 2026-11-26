@@ -382,6 +382,11 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         ],
         type_ignores=[],
     )
+    result.__dict__["annotation_aliases"] = {
+        path: hint
+        for tree in trees.values()
+        for path, hint in tree.__dict__.get("annotation_aliases", {}).items()
+    }
     ast.fix_missing_locations(result)
     for node in ast.walk(result):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
