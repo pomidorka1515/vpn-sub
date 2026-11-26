@@ -84,6 +84,7 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         if definitions[name] > 1:
             claimed[name] = "preserved definition slot"
     imports: list[ast.stmt] = []
+    submodule_imports: dict[str, set[str]] = {}
     dependencies: dict[str, list[str]] = {module: [] for module in trees}
 
     def library(module: str, name: str | None, preferred: str | None = None) -> str:
@@ -220,10 +221,11 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                         preferred = alias.asname or (
                             alias.name.split(".")[0] if isinstance(node, ast.Import) else alias.name
                         )
-                        library(import_module, import_name, preferred)
+                        binding_name = library(import_module, import_name, preferred)
                         if isinstance(node, ast.Import) and not alias.asname and "." in alias.name:
                             # ``import a.b`` binds a but must also load a.b.
-                            library(alias.name, None)
+                            submodule_name = library(alias.name, None)
+                            submodule_imports.setdefault(submodule_name, set()).add(binding_name)
             elif isinstance(node, (ast.Name, ast.Attribute)):
                 target = reference(node)
                 if target is not None:
@@ -390,6 +392,7 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
         for tree in trees.values()
         for path, hint in tree.__dict__.get("annotation_aliases", {}).items()
     }
+    result.__dict__["submodule_imports"] = submodule_imports
     ast.fix_missing_locations(result)
     for node in ast.walk(result):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):

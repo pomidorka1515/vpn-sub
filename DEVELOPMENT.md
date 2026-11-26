@@ -350,7 +350,11 @@ Worker count is capped at the number of input modules. The internal
 callers must use an importable entrypoint guarded by `if __name__ == "__main__":`.
 Internal imports and re-exports become
 direct global references; stdlib and third-party imports share an import table
-at the top. Automatic shortening of globals, import aliases, locals, verified
+at the top. After dead-code elimination, unused external imports are removed and
+remaining imports are grouped by module. Consequently, unused imports must not be
+relied on for side effects, and imported attribute lookup order can change. Dotted
+submodule loads needed by a retained root import and runtime annotation dependencies
+are preserved; reflective scopes conservatively retain imports. Automatic shortening of globals, import aliases, locals, verified
 parameters, closed private methods and private classes remains enabled.
 Additional identifier renames can be opted into through `--allowlist PATH` or
 `--allowlist '["f:helper", "a:helper:value", "v:CONSTANT"]'`. The default is

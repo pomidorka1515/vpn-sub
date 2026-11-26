@@ -21,6 +21,7 @@ from .constants import inline_constants
 from .dataclasses import minify_dataclasses
 from .dead_code import eliminate_dead_code
 from .debug import annotate_debug
+from .imports import optimize_imports
 from .linker import flatten, module_name
 from .markers import strip_markers
 from .mixins import fold_mixins, mark_mixin_origins
@@ -200,6 +201,7 @@ def _obfuscate_modules(
     announce("Minifying and validating app.min.py")
     inline_constants(linked)
     consolidate_aliases(linked)
+    optimize_imports(linked)
     shorten_imports(linked)
     return ObfuscationResult(
         source=minify_tree(
