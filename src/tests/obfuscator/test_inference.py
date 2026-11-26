@@ -540,6 +540,68 @@ callback: Callable[[], Record]
     assert hint.classes == ("fixture.Record",)
 
 
+def test_generic_async_dispatcher_infers_staticmethod_result() -> None:
+    source = """
+import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass, field
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HealthStatus:
+    uptime: float
+class SysUtil:
+    @staticmethod
+    def uptime(): return 1.0
+    @staticmethod
+    def health() -> HealthStatus: return HealthStatus(uptime=2.0)
+class Offload:
+    async def run[**P, T](self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+        return await asyncio.to_thread(function, *args, **kwargs)
+@dataclass(frozen=True, slots=True)
+class Offloads:
+    metrics: Offload = field(default_factory=Offload)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Resources:
+    offloads: Offloads
+class Subscription:
+    def __init__(self, res: Resources): self.res = res
+class Api:
+    def __init__(self, sub: Subscription): self.sub = sub
+    async def health(self):
+        status = await self.sub.res.offloads.metrics.run(SysUtil.health)
+        return status.uptime, SysUtil.uptime()
+async def use():
+    return await Api(Subscription(Resources(offloads=Offloads()))).health()
+__result__ = asyncio.run(use())
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["f:SysUtil:uptime"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (2.0, 1.0)
+
+
+@pytest.mark.parametrize("decorator", ["", "@staticmethod", "@classmethod"])
+def test_method_reference_exposes_return_hint(decorator: str) -> None:
+    hint = expression_hint(f"""
+class Record: pass
+class Factory:
+    {decorator}
+    def make(self) -> Record: return Record()
+""", "Factory.make")
+    assert hint.origin == "callable"
+    assert hint.arguments[-1].classes == ("fixture.Record",)
+
+
+def test_unknown_method_decorator_does_not_expose_return_hint() -> None:
+    hint = expression_hint("""
+class Record: pass
+def decorate(function): return opaque(function)
+class Factory:
+    @decorate
+    def make(self) -> Record: return Record()
+""", "Factory.make")
+    assert not hint
+
+
 def test_binding_annotation_survives_nested_factory_reassignments() -> None:
     source = """
 import sqlite3

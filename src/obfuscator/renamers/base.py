@@ -543,7 +543,15 @@ class ArgumentRenamer:
             return self.class_hint(definition)
         if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if not self.is_property(definition):
-                return TypeHint()
+                if definition.decorator_list and self.descriptor(definition) not in {"staticmethod", "classmethod"}:
+                    return TypeHint()
+                hint = definition.__dict__.get("return_type")
+                if not isinstance(hint, TypeHint):
+                    return TypeHint()
+                result = self.resolved_hint(hint, owner)
+                if isinstance(definition, ast.AsyncFunctionDef):
+                    result = TypeHint(origin="awaitable", arguments=(result,))
+                return TypeHint(origin="callable", arguments=(result,))
             hint = definition.__dict__.get("return_type")
             return self.resolved_hint(hint, owner) if isinstance(hint, TypeHint) else TypeHint()
         if isinstance(definition, ast.Name) and isinstance(definition.ctx, ast.Store):

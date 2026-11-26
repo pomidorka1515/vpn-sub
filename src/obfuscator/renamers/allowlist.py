@@ -883,7 +883,8 @@ class AllowlistRenamer(ArgumentRenamer):
                 or getattr(self.tree, "tainted", False)
                 or "__init__" in self.strings
             ):
-                raise ValueError("Escaping/reflected constructor with allowlisted parameters")
+                constructor_names = ", ".join(sorted(":".join(self.path(constructor)) for constructor in constructors))
+                raise ValueError(f"Escaping/reflected constructor with allowlisted parameters: {constructor_names}; reflective namespace or '__init__' string")
             for node in self.nodes:
                 reflected_receiver: ast.expr
                 if (
@@ -892,6 +893,10 @@ class AllowlistRenamer(ArgumentRenamer):
                     and node.func.id in {"getattr", "vars", "dir"}
                     and node.args
                 ):
+                    if node.func.id == "getattr" and len(node.args) in {2, 3} and self.imported_path(node.func) == "builtins.getattr":
+                        name_value = self.attribute_flow.value(node.args[1])
+                        if name_value.strings and not name_value.unknown and not (name_value.owners or name_value.functions or name_value.containers) and "__init__" not in name_value.strings:
+                            continue
                     reflected_receiver = node.args[0]
                 elif isinstance(node, ast.Attribute) and node.attr in {
                     "__class__", "__dict__", "__getattribute__"
@@ -900,12 +905,18 @@ class AllowlistRenamer(ArgumentRenamer):
                 else:
                     continue
                 owners, _ = self.receiver(reflected_receiver)
-                if any(
-                    (constructor_binding := self.member(owner, "__init__")) is not None
-                    and constructors.intersection(self.definitions(constructor_binding))
+                reflected_constructors = {
+                    constructor
                     for owner in owners
-                ):
-                    raise ValueError("Escaping/reflected constructor with allowlisted parameters")
+                    if (constructor_binding := self.member(owner, "__init__")) is not None
+                    for constructor in self.definitions(constructor_binding)
+                    if constructor in constructors
+                }
+                if reflected_constructors:
+                    constructor_names = ", ".join(sorted(":".join(self.path(constructor)) for constructor in reflected_constructors))
+                    raise ValueError(
+                        f"Escaping/reflected constructor with allowlisted parameters: {constructor_names}; {self.attribute_flow.describe(node)}"
+                    )
         member_families: dict[str, set[ast.ClassDef]] = {}
         selected_names = {binding.name for binding in selected}
         # Resolve everything against the original tree before mutating any name.
@@ -1040,6 +1051,12 @@ class AllowlistRenamer(ArgumentRenamer):
                         not (isinstance(parent, ast.Call) and parent.func is node)
                         and self.alias_assignment(node) is None
                     ):
+                        if (isinstance(node, ast.Attribute) and isinstance(parent, ast.Call)
+                                and isinstance(parent.func, ast.Attribute) and parent.func.attr != "add_url_rule"
+                                and self.attribute_flow.quart_callback_registration(parent, node)):
+                            # These Quart hooks are invoked with positional
+                            # arguments only; route views receive URL keywords.
+                            continue
                         name_only = ", ".join(sorted(
                             f"f:{function.__dict__.get('original_file', '<staging>')}:{':'.join(self.path(function))}"
                             for function in callable_targets & parameter_functions.keys()

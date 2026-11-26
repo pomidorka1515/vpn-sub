@@ -411,6 +411,207 @@ def test_external_bound_callback_on_selected_receiver_is_rejected() -> None:
         AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
 
 
+@pytest.mark.parametrize("method", ["before_serving", "after_serving"])
+def test_quart_lifecycle_registration_accepts_bound_callback(method: str) -> None:
+    source = f"""
+import asyncio
+from quart import Quart
+class Record:
+    def __init__(self): self._value = 7
+    async def callback(self): self._value += 1
+record = Record()
+app = Quart('quart')
+app.{method}(record.callback)
+asyncio.run(app.{method}_funcs[0]())
+__result__ = record._value
+"""
+    assert execute(source)["__result__"] == 8
+
+
+@pytest.mark.parametrize("method", [
+    "before_request", "after_request", "teardown_request",
+    "before_websocket", "after_websocket", "teardown_websocket",
+])
+def test_quart_request_hooks_accept_bound_callback(method: str) -> None:
+    source = f"""
+import asyncio
+from quart import Quart
+class Record:
+    def __init__(self): self._value = 7
+    async def callback(self, response): return self._value + response
+record = Record()
+app = Quart('quart')
+app.{method}(record.callback)
+__result__ = asyncio.run(app.{method}_funcs[None][0](2))
+"""
+    assert execute(source)["__result__"] == 9
+
+
+def test_unrelated_lifecycle_registration_does_not_accept_bound_callback() -> None:
+    source = RECORD + "\nexternal.after_serving(record.__init__)"
+    with pytest.raises(ValueError, match="through bound callback"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_quart_lifecycle_registration_on_annotated_parameter() -> None:
+    source = """
+import asyncio
+from quart import Quart as Application
+class Record:
+    def __init__(self): self._value = 7
+    async def callback(self): self._value += 1
+def register(app: Application, record: Record):
+    app.after_serving(record.callback)
+record = Record()
+app = Application('quart')
+register(app, record)
+asyncio.run(app.after_serving_funcs[0]())
+__result__ = record._value
+"""
+    assert execute(source)["__result__"] == 8
+
+
+@pytest.mark.parametrize("argument", ["'/test', 'test', record.callback", "'/test', endpoint='test', view_func=record.callback"])
+def test_quart_route_registration_accepts_bound_callback(argument: str) -> None:
+    source = f"""
+import asyncio
+from quart import Quart
+class Record:
+    def __init__(self): self._value = 7
+    async def callback(self): return self._value
+record = Record()
+app = Quart('quart')
+app.add_url_rule({argument})
+__result__ = asyncio.run(app.view_functions['test']())
+"""
+    assert execute(source)["__result__"] == 7
+
+
+def test_quart_route_registration_does_not_trust_other_arguments() -> None:
+    source = RECORD + "\nfrom quart import Quart\napp = Quart('quart')\napp.add_url_rule(record.__init__, 'test', None)"
+    with pytest.raises(ValueError, match="through bound callback"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_quart_route_registration_through_annotated_instance_field() -> None:
+    source = """
+import asyncio
+from quart import Quart
+class Base:
+    def __init__(self, app: Quart): self.app = app
+class Record(Base):
+    def __init__(self, app):
+        super().__init__(app)
+        self._value = 7
+    async def callback(self): return self._value
+def register(record: Record):
+    record.app.add_url_rule('/test', 'test', record.callback)
+app = Quart('quart')
+record = Record(app)
+register(record)
+__result__ = asyncio.run(app.view_functions['test']())
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+def test_quart_request_hook_through_inherited_instance_field() -> None:
+    source = """
+import asyncio
+from quart import Quart
+class Base:
+    def __init__(self, app: Quart): self.app = app
+class Record(Base):
+    def __init__(self, app):
+        super().__init__(app)
+        self._value = 7
+        self.app.after_request(self.callback)
+    async def callback(self, response): return self._value + response
+app = Quart('quart')
+record = Record(app)
+__result__ = asyncio.run(app.after_request_funcs[None][0](2))
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 9
+
+
+def test_quart_positional_hook_allows_bound_method_parameter_renames() -> None:
+    source = """
+import asyncio
+from quart import Quart
+class Record:
+    async def callback(self, response): return response + 1
+record = Record()
+app = Quart('quart')
+app.after_request(record.callback)
+__result__ = asyncio.run(app.after_request_funcs[None][0](2))
+"""
+    tree = ast.parse(source)
+    AllowlistRenamer(tree).apply(["f:Record:callback*"])
+    namespace: dict[str, Any] = {}
+    exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 3
+
+
+def test_quart_renamed_hook_runs_on_real_request() -> None:
+    source = """
+import asyncio
+from quart import Quart
+class Record:
+    async def callback(self, response):
+        response.headers['X-Test'] = 'ok'
+        return response
+async def view(): return 'body'
+app = Quart('quart')
+app.add_url_rule('/', 'view', view)
+record = Record()
+app.after_request(record.callback)
+async def request():
+    response = await app.test_client().get('/')
+    return response.status_code, response.headers['X-Test']
+__result__ = asyncio.run(request())
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["f:Record:callback*"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (200, "ok")
+
+
+@pytest.mark.parametrize("registration", [
+    "app.add_url_rule('/test', 'test', record.callback)",
+    "unknown.after_request(record.callback)",
+])
+def test_unknown_or_keyword_dispatch_rejects_method_parameter_renames(registration: str) -> None:
+    source = f"""
+from quart import Quart
+class Record:
+    async def callback(self, response): return response
+record = Record()
+app = Quart('quart')
+{registration}
+"""
+    with pytest.raises(ValueError, match="Escaping callable with allowlisted parameters"):
+        AllowlistRenamer(ast.parse(source)).apply(["f:Record:callback*"])
+
+
+def test_quart_lifecycle_registration_checks_callback_body() -> None:
+    source = """
+from quart import Quart
+class Record:
+    def __init__(self): self._value = 7
+    def callback(self): unknown(self)
+record = Record()
+app = Quart('quart')
+app.after_serving(record.callback)
+"""
+    with pytest.raises(ValueError, match="unresolved consumer"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
 def test_external_callback_body_still_checks_direct_receiver_escapes() -> None:
     source = RECORD + """
 class Service:

@@ -4,7 +4,7 @@ import ast
 import builtins
 import inspect
 import threading
-from _thread import RLock  # ruff: ignore[import-private-name] - Inspect the native type without constructing a lock.
+from _thread import LockType, RLock  # ruff: ignore[import-private-name] - Inspect native types without constructing locks.
 from heapq import merge
 from operator import itemgetter
 from typing import TYPE_CHECKING, cast
@@ -82,10 +82,66 @@ def ordinary_data(analysis: AllowlistRenamer, value: ast.expr, seen: frozenset[a
     # of the called class. Only the inherited object allocator and known builtin
     # value constructors establish the result type without executing code.
     if inspect.getattr_static(constructor, "__new__") is not inspect.getattr_static(object, "__new__") and constructor not in {
-        object, list, tuple, set, frozenset, dict, str, bytes, bytearray, int, float, complex, bool, RLock,
+        object, list, tuple, set, frozenset, dict, str, bytes, bytearray, int, float, complex, bool, LockType, RLock,
     }:
         return False
     return all(inspect.getattr_static(constructor, name, None) is None for name in ("__get__", "__set__", "__delete__", "__set_name__"))
+
+
+def subclass_hook_checks(
+    analysis: AllowlistRenamer, base: ast.ClassDef, family: set[ast.ClassDef], name: str,
+) -> set[ast.Call] | None:
+    """Recognize read-only class validation for fields absent from the class namespace."""
+    if any(analysis.member(cls, name) is not None for cls in family):
+        return None
+    for ancestor in analysis.mro(base):
+        for expression in ancestor.bases:
+            if isinstance(analysis.target(expression, instances=False), ast.ClassDef):
+                continue
+            try:
+                external = analysis.external_base(expression)
+                if inspect.getattr_static(external, "__init_subclass__") is not inspect.getattr_static(object, "__init_subclass__"):
+                    return None
+            except (ImportError, AttributeError, OSError, TypeError, ValueError):
+                return None
+    binding = next((item for item in analysis.node_bindings(base) if item.name == "__init_subclass__"), None)
+    if binding is None:
+        return set()
+    definitions = analysis.definitions(binding)
+    if len(definitions) != 1 or not isinstance(definitions[0], ast.FunctionDef):
+        return None
+    hook = definitions[0]
+    positional = [*hook.args.posonlyargs, *hook.args.args]
+    if hook.decorator_list or not positional:
+        return None
+    receiver = analysis.bindings.get(positional[0])
+    if receiver is None or analysis.definitions(receiver) != [positional[0]]:
+        return None
+    checks: set[ast.Call] = set()
+    for reference in receiver.references:
+        if reference is positional[0]:
+            continue
+        parent = analysis.parents.get(reference)
+        if (isinstance(parent, ast.Call) and parent.args and parent.args[0] is reference
+                and len(parent.args) == 2 and not parent.keywords
+                and analysis.imported_path(parent.func) == "builtins.hasattr"):
+            checks.add(parent)
+            continue
+        if isinstance(parent, ast.Attribute) and parent.value is reference and isinstance(parent.ctx, ast.Load):
+            if parent.attr == "__name__":
+                continue
+            use = analysis.parents.get(parent)
+            if parent.attr != name and isinstance(use, (ast.For, ast.AsyncFor)) and use.iter is parent:
+                members = [analysis.member(cls, parent.attr) for cls in family]
+                if all(member is not None and all(
+                    isinstance(definition, ast.Name)
+                    and isinstance(assignment := analysis.parents.get(definition), (ast.Assign, ast.AnnAssign))
+                    and assignment.value is not None and ordinary_data(analysis, assignment.value)
+                    for definition in analysis.definitions(member)
+                ) for member in members):
+                    continue
+        return None
+    return checks
 
 
 def attribute_owners(
@@ -161,13 +217,19 @@ def plan_attributes(
     verified_families: set[ast.ClassDef] = set()
     for entry, owner, name in targets:
         family = {cls for cls in analysis.classes if owner in analysis.mro(cls)}
+        safe_hook_calls: set[ast.Call] = set()
         for cls in family | set(analysis.mro(owner)):
             analysis.check_receiver(cls, name)
             if cls.decorator_list or any(
-                binding.name in {"__slots__", "__setattr__", "__delattr__", "__init_subclass__"}
+                binding.name in {"__slots__", "__setattr__", "__delattr__"}
                 for binding in analysis.node_bindings(cls)
             ):
                 raise ValueError(f"Allowlist {entry!r}: unsupported dynamic attribute class {cls.name!r}")
+            if any(binding.name == "__init_subclass__" for binding in analysis.node_bindings(cls)):
+                checks = subclass_hook_checks(analysis, cls, family, name) if cls not in family else None
+                if checks is None:
+                    raise ValueError(f"Allowlist {entry!r}: unsupported dynamic attribute class {cls.name!r}")
+                safe_hook_calls.update(checks)
         binding = analysis.member(owner, name)
         if any(
             (id(base), name) in analysis.instance_assignments
@@ -223,6 +285,18 @@ def plan_attributes(
             if isinstance(cast(object, builtin), BuiltinBinding) and builtin_name in {
                 "getattr", "setattr", "delattr", "hasattr", "vars", "dir"
             } and node.args:
+                if node in safe_hook_calls:
+                    continue
+                if (builtin_name in {"getattr", "hasattr"} and len(node.args) in {2, 3}
+                        and isinstance(node.args[0], ast.Call) and len(node.args[0].args) == 1
+                        and not node.args[0].keywords
+                        and analysis.imported_path(node.args[0].func) == "builtins.type"
+                        and all(analysis.member(cls, name) is None for cls in family)):
+                    instance = flow.value(node.args[0].args[0])
+                    key = flow.value(node.args[1])
+                    if (instance.owners & family and not instance.unknown and key.strings and not key.unknown
+                            and not (key.owners or key.functions or key.containers)):
+                        continue
                 receivers = flow.receivers(node.args[0])
                 key = node.args[1] if len(node.args) > 1 else None
                 literal = isinstance(key, ast.Constant) and isinstance(key.value, str)

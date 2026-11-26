@@ -391,8 +391,14 @@ and `hasattr` keys follow it too. Unrelated classes retain same-spelled attribut
 Unresolved/polymorphic receivers, subclass conflicts, unverifiable external inheritance,
 descriptors, dataclasses, slots, dynamic reflection, namespace inspection, and
 unknown external consumers fail closed. Special/name-mangled attributes are unsupported.
+An inherited subclass-validation hook may inspect class names and verify class
+members when the selected field exists only on instances; hooks that expose or
+mutate the subclass, or have unverifiable external parent hooks, remain unsupported.
+Likewise, reads with statically known names from `type(instance)` can select class
+members when the selected field has no class binding; dynamic instance or class
+lookups still fail.
 Class defaults can contain ordinary literal containers and statically verified
-non-descriptor instances, including `set()`, `WeakSet()`, and `threading.RLock()`;
+non-descriptor instances, including `set()`, `WeakSet()`, `threading.Lock()`, and `threading.RLock()`;
 their construction and shared identity are preserved. Empty internal `set` and
 `WeakSet` registries track added receivers through aliases, copies, and ordinary
 `for` loops. Their fixed `add`/`discard`/`remove`/`clear` operations are supported;
@@ -424,6 +430,13 @@ may return selected receivers through opaque external dispatchers; opting into a
 attribute rename accepts external handling of those results. This does not establish
 the external result's receiver type. Direct receiver arguments, bound callbacks on
 selected receivers, and escapes inside visible callback bodies remain checked.
+Quart's serving, request and websocket hook registrations, and `add_url_rule`
+view-function registrations, are exceptions for bound callbacks: Quart stores
+and invokes them without inspecting their receivers; callback bodies are still
+checked. Unsupported registration methods still fail closed.
+For the supported Quart serving, request and websocket hooks, bound-method
+parameters can also be renamed because Quart passes hook arguments positionally.
+This does not apply to route view functions, which may receive URL keywords.
 Fixed builtin protocol operations (such as `dict(tx)` and `len(tx)`) are supported
 without treating them as arbitrary attribute consumers. External return annotations can establish unrelated
 receivers through imported constructors/functions, method calls, assignments, and
@@ -455,8 +468,8 @@ awaitable layer; `asyncio.gather` (including starred iterable inputs), task crea
 use resolved import/builtin bindings, not identifier spellings. PEP 695 generic
 function parameters and ordinary generic class fields/methods are instantiated
 from visible argument shapes, including generic constructor arguments. Annotated
-callable return shapes and visible function references also let generic callback
-dispatchers retain their result receivers. These are syntax-only substitutions,
+callable return shapes and visible function or verified method references also let
+generic callback dispatchers retain their result receivers. These are syntax-only substitutions,
 not a replacement for a type checker; unsupported variadic generics and
 unresolved substitutions do not establish receiver types. Generic calls bind
 defaults, positional-only/keyword-only arguments, fixed tuple expansions, literal

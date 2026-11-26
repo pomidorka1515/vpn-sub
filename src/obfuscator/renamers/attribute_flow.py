@@ -1344,6 +1344,43 @@ class AttributeFlow:
             checked = True
         return checked
 
+    def quart_callback_registration(self, call: ast.Call, argument: ast.expr) -> bool:
+        """Quart registers lifecycle and route callbacks without inspecting their receivers."""
+        if not isinstance(call.func, ast.Attribute):
+            return False
+        if call.func.attr in {
+            "before_serving", "after_serving",
+            "before_request", "after_request", "teardown_request",
+            "before_websocket", "after_websocket", "teardown_websocket",
+        }:
+            if len(call.args) != 1 or call.args[0] is not argument or call.keywords:
+                return False
+        elif call.func.attr == "add_url_rule":
+            if any(isinstance(item, ast.Starred) for item in call.args) or any(item.arg is None for item in call.keywords):
+                return False
+            positional = len(call.args) == 3 and call.args[2] is argument and not any(item.arg == "view_func" for item in call.keywords)
+            keyword = len(call.args) <= 2 and sum(item.arg == "view_func" and item.value is argument for item in call.keywords) == 1
+            if not positional and not keyword:
+                return False
+        else:
+            return False
+        hint = self.external_returns.hint(call.func.value)
+        paths = hint.classes
+        if not paths and isinstance(call.func.value, ast.Name):
+            binding = self.analysis.bindings.get(call.func.value)
+            definitions = self.analysis.definitions(binding) if binding is not None else []
+            if len(definitions) == 1 and isinstance(definitions[0], ast.arg) and definitions[0].annotation is not None:
+                path = self.analysis.imported_path(definitions[0].annotation)
+                paths = (path,) if path is not None else ()
+        if not paths or hint.self_reference or hint.incomplete:
+            return False
+        try:
+            from quart import Quart
+
+            return all(self.external_returns.resolve(path) is Quart for path in paths)
+        except (ImportError, AttributeError, ValueError, TypeError):
+            return False
+
     def verify_call(self, call: ast.Call, family: set[ast.ClassDef]) -> None:
         if self.descriptor_binding(call) is not None or self.wraps_call(call):
             return
@@ -1385,6 +1422,7 @@ class AttributeFlow:
                     # those results; only direct bound receivers escape here.
                     if (callback.bound and isinstance(owner, ast.ClassDef)
                         and (owner in family or bool(callback.receivers & family))
+                        and not self.quart_callback_registration(call, argument)
                     ):
                         raise ValueError(
                             f"Escaping allowlisted attribute receiver through bound callback: {ast.unparse(call)!r}"

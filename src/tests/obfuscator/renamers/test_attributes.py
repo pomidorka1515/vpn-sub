@@ -129,6 +129,59 @@ getattr(record, '__init__')(value=2)
         AllowlistRenamer(ast.parse(source)).apply(["a:Record:__init__:value"])
 
 
+def test_constructor_reflection_error_identifies_call_and_target() -> None:
+    source = """
+class Record:
+    def __init__(self, value): self.value = value
+record = Record(1)
+name = input()
+getattr(type(record), name)
+"""
+    with pytest.raises(ValueError, match=r"Record:__init__; .*getattr\(type\(record\), name\)"):
+        AllowlistRenamer(ast.parse(source)).apply(["a:Record:__init__:value"])
+
+
+def test_constructor_parameters_allow_reflection_of_other_methods() -> None:
+    source = """
+class Record:
+    def __init__(self, value): self.value = value
+    def read(self): return self.value
+record = Record(value=7)
+name = 'read'
+__result__ = getattr(record, name)()
+"""
+    tree = ast.parse(source)
+    AllowlistRenamer(tree).apply(["a:Record:__init__:value"])
+    namespace: dict[str, Any] = {}
+    exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+@pytest.mark.parametrize("handler", ["read", "__init__", "<dynamic>"])
+def test_constructor_reflection_can_use_literal_namedtuple_field(handler: str) -> None:
+    source = """
+from typing import NamedTuple
+class Record:
+    def __init__(self, value): self.value = value
+    def read(self): return self.value
+class Route(NamedTuple):
+    handler: str
+    def register(self, api: Record): return getattr(type(api), self.handler)
+route = Route(HANDLER)
+record = Record(value=7)
+__result__ = route.register(record)(record)
+""".replace("HANDLER", "input()" if handler == "<dynamic>" else repr(handler))
+    if handler != "read":
+        with pytest.raises(ValueError, match="reflected constructor"):
+            obfuscate_modules({Path("main.py"): source}, ["a:Record:__init__:value"], jobs=1)
+        return
+    result = obfuscate_modules({Path("main.py"): source}, ["a:Record:__init__:value"], jobs=1)
+    assert "a:Record:__init__:value" in result.renames
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
 def test_constructor_keywords_and_aliases() -> None:
     source = """
 class Record:
@@ -215,6 +268,127 @@ def test_dynamic_class_attributes_are_rejected(source: str) -> None:
         AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
 
 
+def test_subclass_validation_hook_allows_subclass_instance_field() -> None:
+    source = """
+class Route:
+    def __init__(self, handler): self.handler = handler
+    def validate(self): pass
+class Base:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not hasattr(cls, 'ROUTES'): raise TypeError(cls.__name__)
+        for route in cls.ROUTES:
+            route.validate()
+            if not hasattr(cls, route.handler): raise TypeError(cls.__name__)
+class Record(Base):
+    ROUTES = (Route('handler'),)
+    def __init__(self): self._value = 7
+    def handler(self): return self._value
+record = Record()
+__result__ = record.handler()
+"""
+    tree = ast.parse(source)
+    AllowlistRenamer(tree).apply(["attr:Record:_value"])
+    namespace: dict[str, Any] = {}
+    exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+@pytest.mark.parametrize("operation", ["setattr(cls, '_value', 1)", "unknown(cls)", "cls._value = 1"])
+def test_subclass_hook_that_exposes_class_is_rejected(operation: str) -> None:
+    source = f"""
+class Base:
+    def __init_subclass__(cls): {operation}
+class Record(Base):
+    def __init__(self): self._value = 7
+"""
+    with pytest.raises(ValueError, match="dynamic"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_subclass_hook_cannot_observe_renamed_class_field() -> None:
+    source = """
+class Base:
+    def __init_subclass__(cls):
+        assert hasattr(cls, '_value')
+class Record(Base):
+    _value = 7
+"""
+    with pytest.raises(ValueError, match="dynamic"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_dynamic_class_lookup_does_not_observe_instance_only_field() -> None:
+    source = """
+class Record:
+    def __init__(self): self._value = 7
+    def read(self): return self._value
+record = Record()
+name = 'read'
+callback = getattr(type(record), name).__get__(record, type(record))
+__result__ = callback()
+"""
+    tree = ast.parse(source)
+    AllowlistRenamer(tree).apply(["attr:Record:_value"])
+    namespace: dict[str, Any] = {}
+    exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+
+
+def test_dynamic_class_lookup_rejects_class_level_field() -> None:
+    source = """
+class Record:
+    _value = 7
+record = Record()
+name = '_value'
+__result__ = getattr(type(record), name)
+"""
+    with pytest.raises(ValueError, match="Dynamic reflection"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_dynamic_instance_lookup_remains_rejected() -> None:
+    source = """
+class Record:
+    def __init__(self): self._value = 7
+record = Record()
+name = '_value'
+__result__ = getattr(record, name)
+"""
+    with pytest.raises(ValueError, match="Dynamic reflection"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_class_lookup_with_unknown_name_alternative_remains_rejected() -> None:
+    source = """
+class Record:
+    def __init__(self): self._value = 7
+record = Record()
+name = 'read' if flag else input()
+getattr(type(record), name)
+"""
+    with pytest.raises(ValueError, match="Dynamic reflection"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_dynamic_class_lookup_through_shared_base() -> None:
+    source = """
+class Base: pass
+class Record(Base):
+    def __init__(self): self._value = 7
+    def read(self): return 7
+class Other(Base):
+    def other(self): return 8
+def dispatch(item: Base, name: str):
+    return getattr(type(item), name).__get__(item, type(item))()
+__result__ = dispatch(Record(), 'read'), dispatch(Other(), 'other')
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == (7, 8)
+
+
 def test_conflicting_allowlist_kinds_are_rejected() -> None:
     tree = ast.parse("class Record:\n _value = 4\n__result__ = Record._value")
     with pytest.raises(ValueError, match="Conflicting"):
@@ -222,7 +396,7 @@ def test_conflicting_allowlist_kinds_are_rejected() -> None:
 
 
 @pytest.mark.parametrize("default", [
-    "object()", "set()", "{}", "[]", "(1, 2)", "WeakSet()", "threading.RLock()", "Data()",
+    "object()", "set()", "{}", "[]", "(1, 2)", "WeakSet()", "threading.Lock()", "threading.RLock()", "Data()",
     "make_registry()", "make_lock()", "Defaults.VALUE",
 ])
 def test_ordinary_class_data_preserves_identity_and_inheritance(default: str) -> None:
