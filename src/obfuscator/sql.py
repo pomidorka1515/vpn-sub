@@ -176,8 +176,10 @@ class TriggerParser:
         return start == len(body)
 
 
-def complete_statements(source: str) -> bool:
-    parts = tokens(source)
+def complete_statements(
+    source: str, *, parts: list[tuple[str, str]] | None = None
+) -> bool:
+    parts = tokens(source) if parts is None else parts
     if parts:
         prefix = [text.upper() for _, text in parts[:3]]
         if prefix[:2] == ["CREATE", "TRIGGER"] or prefix in (
@@ -234,7 +236,12 @@ def minify_sql(source: str, *, preserve_edges: bool = False) -> str:
         lambda match: "?" if match.lastgroup == "parameter" else match.group(),
         source,
     )
-    if not complete_statements(parsed):
+    parsed_parts = (
+        [(kind, "?" if kind == "parameter" else text) for kind, text in parts]
+        if any(kind == "parameter" for kind, _ in parts)
+        else parts
+    )
+    if not complete_statements(parsed, parts=parsed_parts):
         return source
     output = [parts[0][1]]
     for previous, current in pairwise(parts):
@@ -289,12 +296,13 @@ def minify_sql_literals(tree: ast.Module, *, executor: ProcessPoolExecutor | Non
             literals.append((node, node.value))
         pending.extend(ast.iter_child_nodes(node))
     values = list(dict.fromkeys(value for _, value in literals))
+    candidates = [value for value in values if _REMOVABLE.search(value) is not None]
     replacements = dict(
         zip(
-            values,
-            ordered_map(executor, partial(minify_sql, preserve_edges=True), values, chunksize=32),
+            candidates,
+            ordered_map(executor, partial(minify_sql, preserve_edges=True), candidates, chunksize=32),
             strict=True,
         )
     )
     for node, value in literals:
-        node.value = replacements[value]
+        node.value = replacements.get(value, value)

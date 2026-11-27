@@ -5,7 +5,6 @@ from typing import cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
-from .analysis import inspects_frames
 from .annotations import TypeHint
 from .debug import record_attribute
 from .renamers.base import ArgumentRenamer
@@ -206,16 +205,17 @@ class _Dataclasses(ArgumentRenamer):
         # A definition with no visible Python constructor is not evidence of a
         # closed class: it may be an externally instantiated schema/export.
         self.preserved.update(self.records - constructed)
+        assignments_by_owner: dict[int, list[ast.Assign | ast.AnnAssign]] = {}
+        for (identity, _), assignments in self.instance_assignments.items():
+            assignments_by_owner.setdefault(identity, []).extend(assignments)
         for owner in self.classes:
             dependencies: set[ast.ClassDef] = set()
             fields = cast(dict[str, TypeHint], owner.__dict__.get("field_types", {}))
             for hint in fields.values():
                 dependencies.update(self.hint_classes(hint, owner))
-            for (identity, _), assignments in self.instance_assignments.items():
-                if identity == id(owner):
-                    for assignment in assignments:
-                        if assignment.value is not None:
-                            dependencies.update(self.values(assignment.value))
+            for assignment in assignments_by_owner.get(id(owner), ()):
+                if assignment.value is not None:
+                    dependencies.update(self.values(assignment.value))
             self.dependencies[owner] = dependencies
             for base in owner.bases:
                 self.preserved.update(self.values(base) & self.records)
@@ -396,7 +396,7 @@ class _Dataclasses(ArgumentRenamer):
         self.named = self.closure(self.named | self.preserved)
 
     def run(self) -> None:
-        if not self.records or inspects_frames(self.tree) or getattr(self.tree, "tainted", False):
+        if not self.records or self.frame_inspection or getattr(self.tree, "tainted", False):
             return
         # Namespace reflection can expose even classes not mentioned as operands.
         if any(

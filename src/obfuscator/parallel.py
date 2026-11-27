@@ -20,7 +20,7 @@ def ordered_map[T, R](
     function: Callable[[T], R],
     values: Iterable[T],
     *,
-    chunksize: int = 1,
+    chunksize: int = 8,
 ) -> list[R]:
     """Keep input order and propagate worker failures in serial and parallel mode."""
     if executor is None:

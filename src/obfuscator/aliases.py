@@ -14,16 +14,16 @@ from .analysis import inspects_frames
 from .renamers.base import ArgumentRenamer
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     from .analysis import Binding
 
 __all__: list[str] = ["consolidate_aliases", "shorten_imports"]
 
 
-def fresh_names(tree: ast.Module) -> Iterator[str]:
+def fresh_names(tree: ast.Module, nodes: Iterable[ast.AST] | None = None) -> Iterator[str]:
     used: set[str] = set()
-    for node in ast.walk(tree):
+    for node in ast.walk(tree) if nodes is None else nodes:
         used.update(binding.name for binding in ArgumentRenamer.node_bindings(node))
         if isinstance(node, ast.Name):
             used.add(node.id)
@@ -79,7 +79,7 @@ def rename_bindings(
         return
     # Quoted field annotations are evaluated later by dataclasses/dacite. They
     # are not references in the lexical resolver, so update them explicitly.
-    for node in ast.walk(tree):
+    for node in analysis.nodes:
         if not isinstance(node, ast.AnnAssign):
             continue
         scope = cast(ast.AST, node.__dict__["namespace"])
@@ -109,7 +109,7 @@ def shorten_imports(tree: ast.Module) -> None:
     analysis = ArgumentRenamer({"__main__": tree})
     if getattr(tree, "tainted", False):
         return
-    fresh = fresh_names(tree)
+    fresh = fresh_names(tree, analysis.nodes)
     replacements: dict[Binding, str] = {}
     for binding in analysis.symbols["__main__"].values():
         definitions = analysis.definitions(binding)
@@ -156,7 +156,7 @@ def consolidate_aliases(tree: ast.Module) -> None:
         else:
             continue
         groups[key].append((statement, binding))
-    fresh = fresh_names(tree)
+    fresh = fresh_names(tree, analysis.nodes)
     replacements: dict[Binding, str] = {}
     removed: set[ast.stmt] = set()
     hoisted: list[ast.stmt] = []

@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.binding import BuiltinBinding
 
-from ..analysis import inspects_frames
 from ..debug import record_attribute
 
 if TYPE_CHECKING:
@@ -180,7 +179,7 @@ def plan_attributes(
         return changes, bindings, report
     targets = attribute_owners(analysis, entries)
     nodes = analysis.nodes
-    if inspects_frames(nodes) or getattr(analysis.tree, "tainted", False):
+    if analysis.frame_inspection or getattr(analysis.tree, "tainted", False):
         raise ValueError("Cannot rename attributes in a reflective namespace")
     flow = analysis.attribute_flow
     analysis.used.update(analysis.strings)
@@ -264,7 +263,11 @@ def plan_attributes(
         for node in candidates:
             if id(node) in analysis.annotation_nodes:
                 continue
-            if verify_family:
+            if (
+                verify_family
+                and isinstance(node, ast.expr)
+                and not isinstance(getattr(node, "ctx", None), (ast.Store, ast.Del))
+            ):
                 flow.verify_storage(node, family)
             if isinstance(node, ast.Attribute) and node.attr == name:
                 receivers = flow.receivers(node.value)
@@ -293,9 +296,9 @@ def plan_attributes(
                         and analysis.imported_path(node.args[0].func) == "builtins.type"
                         and all(analysis.member(cls, name) is None for cls in family)):
                     instance = flow.value(node.args[0].args[0])
-                    key = flow.value(node.args[1])
-                    if (instance.owners & family and not instance.unknown and key.strings and not key.unknown
-                            and not (key.owners or key.functions or key.containers)):
+                    key_value = flow.value(node.args[1])
+                    if (instance.owners & family and not instance.unknown and key_value.strings and not key_value.unknown
+                            and not (key_value.owners or key_value.functions or key_value.containers)):
                         continue
                 receivers = flow.receivers(node.args[0])
                 key = node.args[1] if len(node.args) > 1 else None

@@ -147,7 +147,14 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
             return library(module, name, binding.name), False
         return imported(module, name, seen | {id(binding)})
 
+    reference_cache: dict[ast.expr, tuple[str, bool] | None] = {}
+
     def reference(node: ast.expr) -> tuple[str, bool] | None:
+        if node not in reference_cache:
+            reference_cache[node] = resolve_reference(node)
+        return reference_cache[node]
+
+    def resolve_reference(node: ast.expr) -> tuple[str, bool] | None:
         if isinstance(node, ast.Name):
             binding = analysis.bindings.get(node)
             if binding is not None and (
@@ -163,6 +170,7 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
 
     # Removing ``worker.`` can expose a real collision with a caller's local
     # ``calculate``. Rename the linked symbol only when such capture occurs.
+    scope_bindings: dict[ast.AST, dict[str, Binding]] = {}
     for nodes in analysis.module_nodes.values():
         for node in nodes:
             if not isinstance(node, (ast.Name, ast.Attribute)):
@@ -174,12 +182,14 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
             initial = cast(ast.AST, node.__dict__["namespace"])
             scope = initial
             while not isinstance(scope, ast.Module):
-                bindings = (
-                    analysis.node_bindings(scope)
-                    if not isinstance(scope, ast.ClassDef) or scope is initial
-                    else ()
-                )
-                shadow = next((binding for binding in bindings if binding.name == name), None)
+                shadow = None
+                if not isinstance(scope, ast.ClassDef) or scope is initial:
+                    if scope not in scope_bindings:
+                        bindings: dict[str, Binding] = {}
+                        for binding in analysis.node_bindings(scope):
+                            bindings.setdefault(binding.name, binding)
+                        scope_bindings[scope] = bindings
+                    shadow = scope_bindings[scope].get(name)
                 # Pure import bindings disappear during linking, so cannot
                 # capture a global even when their original aliases match.
                 if shadow is not None and any(
@@ -193,6 +203,7 @@ def flatten(trees: dict[str, ast.Module], *, rename_classes: bool = True) -> ast
                     external.update(
                         (key, replacement) for key, value in external.items() if value == name
                     )
+                    reference_cache.clear()
                     for statement in imports:
                         for alias in cast(ast.Import | ast.ImportFrom, statement).names:
                             if alias.asname == name:

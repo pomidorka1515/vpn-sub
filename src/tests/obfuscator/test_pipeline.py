@@ -14,10 +14,29 @@ import python_minifier
 
 import obfuscator
 from obfuscator import pipeline
+from obfuscator.analysis import inspects_frames
 from obfuscator.pipeline import minify_tree, obfuscate_modules, prepare_tree
 from obfuscator.renamers.allowlist import AllowlistRenamer
+from obfuscator.renamers.methods import PrivateMethodRenamer
 
 __all__: list[str] = []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "x = 1\n",
+        "import sys\nsys._getframe()\n",
+        "from sys import settrace as trace\n",
+        "frame.f_locals\n",
+        "dir()\n",
+        "dir(value)\n",
+        "dir(object=value)\n",
+    ],
+)
+def test_combined_metadata_frame_check_matches_original(source: str) -> None:
+    tree = ast.parse(source)
+    assert pipeline._minify_metadata(tree)[1] == inspects_frames(tree)
 
 
 def test_pipeline_links_modules_and_reports_renames() -> None:
@@ -171,6 +190,69 @@ def test_combined_allowlist_preserves_original_output_snapshot() -> None:
     assert result.renames == {
         "f:helper*": "d", "c:Point": "e", "f:Record:read": "f", "attr:Record:payload": "c",
     }
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        (
+            "class Record:\n def _read(self, value): return value + 1\n"
+            "def helper(value): return Record()._read(value=value)\n"
+            "__result__ = helper(value=4)\n"
+        ),
+        (
+            "class Record:\n def _read(self, value): return value\n"
+            "record = Record()\ncallback = record._read\nprint(callback)\n"
+        ),
+        (
+            "def helper(value, **kwargs): return value\n"
+            "__result__ = helper(value=1, **{'extra': 2})\n"
+        ),
+    ],
+)
+def test_private_method_call_analysis_matches_fresh_analysis(source: str) -> None:
+    def rename(*, reuse: bool) -> tuple[str, int, int, dict[str, int]]:
+        tree = prepare_tree(source, "main.py")
+        renamer = PrivateMethodRenamer({"__main__": tree})
+        renamer.run()
+        renamed_methods = renamer.renamed
+        renamer.rename_parameters(reuse_calls=reuse)
+        return ast.dump(tree), renamed_methods, renamer.renamed, dict(renamer.skipped)
+
+    assert rename(reuse=True) == rename(reuse=False)
+
+
+def test_allowlist_skips_unrelated_attribute_callable_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tree = ast.parse(
+        "class Record:\n"
+        " def read(self, value): return value\n"
+        "def other(value): return value.unrelated()\n"
+        "result = Record().read(value=4)\n"
+    )
+    original = AllowlistRenamer.callable_targets
+
+    def checked(self: AllowlistRenamer, node: ast.expr) -> set[ast.AST]:
+        assert not (isinstance(node, ast.Attribute) and node.attr == "unrelated")
+        return original(self, node)
+
+    monkeypatch.setattr(AllowlistRenamer, "callable_targets", checked)
+    assert "a:Record:read:value" in AllowlistRenamer(tree).apply(["a:Record:read:value"])
+
+
+def test_unrelated_ambiguous_super_still_fails_closed() -> None:
+    tree = ast.parse(
+        "class A:\n"
+        " def call(self): return super().foo()\n"
+        "class Z:\n"
+        " def foo(self): return 1\n"
+        "class B(A, Z): pass\n"
+        "def helper(value): return value\n"
+        "helper(value=1)\n"
+    )
+    with pytest.raises(ValueError, match="Ambiguous super attribute"):
+        AllowlistRenamer(tree).apply(["a:helper:value"])
 
 
 def test_cleanup_precedes_minification(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, cast
 
 from python_minifier.rename.resolve_names import get_binding
 
-from ..analysis import Binding, inspects_frames
+from ..analysis import Binding
 from .base import ArgumentRenamer
 
 if TYPE_CHECKING:
     from ..analysis import Function
+    from .base import CallAnalysis
 
 __all__: list[str] = [
     "PrivateMethodRenamer",
@@ -27,7 +28,7 @@ def rename_constructor_classes(tree: ast.Module) -> None:
     names may be resolved later by dacite or typing, outside lexical binding.
     """
     analysis = ArgumentRenamer({"__main__": tree})
-    if inspects_frames(analysis.nodes) or getattr(tree, "tainted", False):
+    if analysis.frame_inspection or getattr(tree, "tainted", False):
         return
     nodes = analysis.nodes
     analysis.used.update(analysis.strings)
@@ -113,19 +114,29 @@ class PrivateMethodRenamer(ArgumentRenamer):
     inheritance, unknown decorators, and unresolved same-named attributes.
     """
 
-    def rename_parameters(self) -> None:
-        """Reuse lexical indexes after renaming methods, but recheck caller safety.
+    def __init__(self, trees: dict[str, ast.Module]) -> None:
+        super().__init__(trees)
+        self._method_analysis: CallAnalysis | None = None
 
-        Method renaming changes spellings, not scopes, nodes, or binding identities.
-        The base pass clears its inference caches before analyzing the updated names.
+    def rename_parameters(self, *, reuse_calls: bool = False) -> None:
+        """Rename parameters, optionally reusing the private-method call analysis.
+
+        Fresh names cannot collide with existing names or reflected strings, so
+        method renaming changes neither call targets nor their escape status.
+        Reuse requires that no other edits occurred since ``run``. The base
+        pass still clears spelling-dependent inference caches.
         """
-        super().run()
+        analysis = self._method_analysis if reuse_calls else None
+        self._method_analysis = None
+        self._run(analysis)
 
     def run(self) -> None:
         self._class_mros.clear()
         self._member_bindings.clear()
+        self.imported_paths.clear()
         self.renamed = 0
-        _, _, reflected = self.analyze_calls()
+        self._method_analysis = self.analyze_calls()
+        _, _, reflected = self._method_analysis
         references: dict[Function, list[ast.Attribute]] = {}
         candidates = [
             function
@@ -168,6 +179,8 @@ class PrivateMethodRenamer(ArgumentRenamer):
             for reference in references.get(function, []):
                 reference.attr = new
             self.renamed += 1
+        if self.renamed:
+            self.imported_paths.clear()
 
 
 def rename_private_classes(tree: ast.Module) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
+from functools import cache
 from typing import TYPE_CHECKING, Never, cast
 
 from python_minifier.rename.binding import BuiltinBinding
@@ -386,7 +387,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
         for root in roots:
             if orders[root] == [root, api_base]:
                 _fail(root, "composition root no longer has mixins")
-    for child in ast.walk(tree):
+    for child in analysis.nodes:
         if (
             isinstance(child, ast.Name)
             and child.id in {"globals", "locals"}
@@ -407,7 +408,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             )
     base_nodes = {base for node in family for base in node.bases}
     mixin_names = {name for name, node in names.items() if node in mixins}
-    for child in ast.walk(tree):
+    for child in analysis.nodes:
         if isinstance(child, ast.ClassDef) and child not in family:
             for base in child.bases:
                 for reference in ast.walk(base):
@@ -442,14 +443,14 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
                 "hierarchy or namespace reflection",
             )
 
-    used = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    used = {node.id for node in analysis.nodes if isinstance(node, ast.Name)}
     used.update(
         node.name
-        for node in ast.walk(tree)
+        for node in analysis.nodes
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
     )
-    used.update(node.arg for node in ast.walk(tree) if isinstance(node, ast.arg))
-    used.update(node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute))
+    used.update(node.arg for node in analysis.nodes if isinstance(node, ast.arg))
+    used.update(node.attr for node in analysis.nodes if isinstance(node, ast.Attribute))
     number = 0
 
     def fresh() -> str:
@@ -542,7 +543,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             selected[name] = (fresh(), statement)
 
     data_references: dict[ast.Attribute, str] = {}
-    for child in ast.walk(tree):
+    for child in analysis.nodes:
         if not isinstance(child, ast.Name) or child.id not in mixin_names:
             continue
         if child in base_nodes or child in alias_nodes:
@@ -833,6 +834,7 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
         if isinstance(path := mixin.__dict__.get("annotation_path"), str)
     }
 
+    @cache
     def rewrite_hint(hint: TypeHint) -> TypeHint:
         return replace(
             hint,

@@ -1,13 +1,36 @@
 from __future__ import annotations
 
 from types import FunctionType
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 import python_minifier
 from python_minifier.module_printer import ModulePrinter
 from python_minifier.token_printer import TokenPrinter
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 __all__: list[str] = ["minify"]
+
+
+class _PreservedNames(list[str]):  # ruff: ignore[subclass-builtin] - The pinned minifier expects a list.
+    """Ordered minifier preserve list with constant-time membership checks.
+
+    The pinned minifier extends these lists before checking every binding.
+    Preserve list iteration and insertion order while indexing those lookups.
+    """
+
+    def __init__(self, names: Iterable[str]) -> None:
+        super().__init__(names)
+        self._names: set[str] = set(self)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._names
+
+    def extend(self, names: Iterable[str]) -> None:
+        incoming = list(names)
+        super().extend(incoming)
+        self._names.update(incoming)
 
 
 class _Fragments:  # ruff: ignore[eq-without-hash] - Mutable buffer is intentionally unhashable.

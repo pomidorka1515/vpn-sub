@@ -13,7 +13,7 @@ from typing import cast
 
 from python_minifier.rename.binding import BuiltinBinding, NameBinding
 
-from ..analysis import Binding, inspects_frames
+from ..analysis import Binding
 from .attribute_flow import AttributeFlow
 from .attributes import attribute_owners, plan_attributes
 from .base import ArgumentRenamer
@@ -415,6 +415,19 @@ class AllowlistRenamer(ArgumentRenamer):
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     groups.setdefault(child.name, []).append(child)
             for name, functions in groups.items():
+                # Only a builtin @property can start an accessor chain. Most
+                # methods are ordinary definitions, so avoid manufacturing a
+                # temporary binding and collecting definitions for each one.
+                first = functions[0]
+                if not isinstance(first, (ast.FunctionDef, ast.AsyncFunctionDef)) or len(first.decorator_list) != 1:
+                    continue
+                decorator = first.decorator_list[0]
+                if not (
+                    isinstance(decorator, ast.Name)
+                    and decorator.id == "property"
+                    and isinstance(cast(object, self.bindings.get(decorator)), BuiltinBinding)
+                ):
+                    continue
                 references = functions + local_names.get((owner, name), [])
                 previous = {node: self.bindings[node] for node in references if node in self.bindings}
                 binding = cast(Callable[[str], Binding], NameBinding)(name)
@@ -429,12 +442,14 @@ class AllowlistRenamer(ArgumentRenamer):
                     self._definitions.pop(old_binding, None)
                     replaced.add(old_binding)
                 owner.__dict__.setdefault("bindings", []).append(binding)
-        for node in self.nodes:
-            if "bindings" in node.__dict__:
-                node.__dict__["bindings"] = [
-                    binding for binding in self.node_bindings(node)
-                    if binding not in replaced or binding.references
-                ]
+        if replaced:
+            self.imported_paths.clear()
+            for node in self.nodes:
+                if "bindings" in node.__dict__:
+                    node.__dict__["bindings"] = [
+                        binding for binding in self.node_bindings(node)
+                        if binding not in replaced or binding.references
+                    ]
 
     def property_accessors(self, binding: Binding) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
         """Recognize a local builtin property and its same-name accessor chain."""
@@ -879,7 +894,7 @@ class AllowlistRenamer(ArgumentRenamer):
         }
         if constructors:
             if (
-                inspects_frames(self.nodes)
+                self.frame_inspection
                 or getattr(self.tree, "tainted", False)
                 or "__init__" in self.strings
             ):
@@ -919,6 +934,14 @@ class AllowlistRenamer(ArgumentRenamer):
                     )
         member_families: dict[str, set[ast.ClassDef]] = {}
         selected_names = {binding.name for binding in selected}
+        # Attribute callables resolve through a member of the same spelling.
+        # Avoid inferring receivers for unrelated attribute names throughout
+        # the whole linked program when only a few signatures were selected.
+        parameter_member_names = {
+            function.name
+            for function in parameter_functions
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
         # Resolve everything against the original tree before mutating any name.
         for node in self.nodes:
             if id(node) in self.annotation_nodes:
@@ -1018,6 +1041,11 @@ class AllowlistRenamer(ArgumentRenamer):
                                     f"{', '.join(annotation_entries)} in {reference.value!r}"
                                 )
             if parameter_functions and isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute) and node.func.attr not in parameter_member_names:
+                    # Even unrelated super calls can expose an ambiguous MRO,
+                    # which the original full callable analysis rejects.
+                    self.super_bindings(node.func)
+                    continue
                 call_targets = self.callable_targets(node.func)
                 affected_functions = call_targets & parameter_functions.keys()
                 if affected_functions:
@@ -1044,6 +1072,9 @@ class AllowlistRenamer(ArgumentRenamer):
                 and isinstance(node, (ast.Name, ast.Attribute))
                 and isinstance(node.ctx, ast.Load)
             ):
+                if isinstance(node, ast.Attribute) and node.attr not in parameter_member_names:
+                    self.super_bindings(node)
+                    continue
                 callable_targets = self.callable_targets(node)
                 if callable_targets & parameter_functions.keys():
                     parent = self.parents.get(node)

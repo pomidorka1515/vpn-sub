@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from .aliases import consolidate_aliases, shorten_imports
-from .analysis import inspects_frames
 from .annotations import AnnotationIndex
 from .cleanup import CollapseLiterals, ReleaseCleanup, strip_typing_imports
 from .constants import inline_constants
@@ -22,7 +21,7 @@ from .debug import annotate_debug
 from .imports import optimize_imports
 from .linker import flatten, module_name
 from .markers import strip_markers
-from .minifier import minify
+from .minifier import _PreservedNames, minify
 from .mixins import fold_mixins, mark_mixin_origins
 from .parallel import default_jobs, ordered_map
 from .renamers.allowlist import AllowlistRenamer
@@ -44,6 +43,57 @@ __all__: list[str] = [
     "obfuscate_modules",
     "prepare_tree",
 ]
+
+_FRAME_APIS: frozenset[str] = frozenset(
+    {
+        "_getframe",
+        "_current_frames",
+        "currentframe",
+        "settrace",
+        "setprofile",
+        "f_locals",
+        "f_globals",
+        "co_varnames",
+    }
+)
+
+
+def _minify_metadata(tree: ast.Module) -> tuple[set[str], bool]:
+    """Collect minifier preservation data and frame-taint in one tree walk."""
+    preserved: set[str] = set()
+    reflected = False
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Attribute) and node.attr in _FRAME_APIS
+        ) or (
+            isinstance(node, ast.alias) and node.name in _FRAME_APIS
+        ) or (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "dir"
+            and not node.args
+            and not node.keywords
+        ):
+            reflected = True
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            preserved.add(node.name)
+        elif isinstance(node, ast.arg):
+            preserved.add(node.arg)
+        elif isinstance(node, ast.Name) and node.id.startswith("__") and node.id.endswith("__"):
+            preserved.add(node.id)
+        elif isinstance(node, ast.AnnAssign):
+            # Postponed field annotations and quoted forward references are
+            # evaluated outside lexical resolution. Preserve their dependencies.
+            pending: list[ast.AST] = [node.annotation]
+            while pending:
+                annotation = pending.pop()
+                for reference in ast.walk(annotation):
+                    if isinstance(reference, ast.Name):
+                        preserved.add(reference.id)
+                    elif isinstance(reference, ast.Constant) and isinstance(reference.value, str):
+                        with suppress(SyntaxError):
+                            pending.append(ast.parse(reference.value, mode="eval"))
+    return preserved, reflected
 
 
 @dataclass(frozen=True)
@@ -191,7 +241,7 @@ def _obfuscate_modules(
     methods = PrivateMethodRenamer(linked_trees)
     methods.run()
     renamed_methods = methods.renamed
-    methods.rename_parameters()
+    methods.rename_parameters(reuse_calls=True)
     renamed_parameters = methods.renamed
     skipped_parameters = methods.skipped
     del methods
@@ -268,40 +318,18 @@ def minify_tree(
     minify_sql_literals(tree, executor=executor)
     rename_constructor_classes(tree)
     source = ast.unparse(tree)
-    preserved: set[str] = set()
-    for node in ast.walk(tree):
-        # Keep the planned class/function/parameter spellings: logs, callbacks
-        # and keyword calls depend on these. Constructor-only classes and closed
-        # private methods have already been renamed with their callers.
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            preserved.add(node.name)
-        elif isinstance(node, ast.arg):
-            preserved.add(node.arg)
-        elif isinstance(node, ast.Name) and node.id.startswith("__") and node.id.endswith("__"):
-            preserved.add(node.id)
-        elif isinstance(node, ast.AnnAssign):
-            # Postponed field annotations and quoted forward references are
-            # evaluated by dataclasses/dacite later, outside lexical resolution.
-            # Keep their dependencies (including import/type aliases) available.
-            pending: list[ast.AST] = [node.annotation]
-            while pending:
-                annotation = pending.pop()
-                for reference in ast.walk(annotation):
-                    if isinstance(reference, ast.Name):
-                        preserved.add(reference.id)
-                    elif isinstance(reference, ast.Constant) and isinstance(reference.value, str):
-                        with suppress(SyntaxError):
-                            pending.append(ast.parse(reference.value, mode="eval"))
-    reflected = inspects_frames(tree)
+    # Keep the planned class/function/parameter spellings: logs, callbacks and
+    # keyword calls depend on these. Do the frame check during the same walk.
+    preserved, reflected = _minify_metadata(tree)
     result = minify(
         source,
         filename=filename,
         rename_locals=rename_locals and not reflected,
-        preserve_locals=sorted(preserved),
+        preserve_locals=_PreservedNames(sorted(preserved)),
         rename_globals=rename_globals and not reflected,
         # BuiltinBinding.rename inserts aliases such as ``A = len`` at module
         # scope. Keep direct builtin calls so Nuitka can recognize/optimize them.
-        preserve_globals=sorted(preserved | set(dir(builtins))),
+        preserve_globals=_PreservedNames(sorted(preserved | set(dir(builtins)))),
         remove_annotations=False,
         remove_literal_statements=False,
         hoist_literals=False,
@@ -323,6 +351,6 @@ def obfuscate(source: str, filename: str) -> str:
     rename_private_classes(tree)
     methods = PrivateMethodRenamer({"__main__": tree})
     methods.run()
-    methods.rename_parameters()
+    methods.rename_parameters(reuse_calls=True)
     del methods
     return minify_tree(tree, filename)

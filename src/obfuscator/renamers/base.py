@@ -5,6 +5,7 @@ import keyword
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import replace
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
@@ -25,6 +26,11 @@ __all__: list[str] = ["ArgumentRenamer"]
 
 _EMPTY_SYMBOLS: MappingProxyType[str, Binding] = MappingProxyType({})
 _RESERVED_NAMES: frozenset[str] = frozenset((*keyword.kwlist, "self", "cls"))
+type CallAnalysis = tuple[
+    dict[ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda, list[ast.Call]],
+    set[ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda],
+    set[ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda],
+]
 
 
 class ArgumentRenamer:
@@ -41,6 +47,7 @@ class ArgumentRenamer:
     def __init__(self, trees: dict[str, ast.Module]) -> None:
         self.hint_cache: dict[tuple[ast.AST, frozenset[int]], TypeHint] = {}
         self.root_hints: dict[ast.AST, TypeHint] = {}
+        self.imported_paths: dict[ast.AST, str | None] = {}
         self._definitions: dict[Binding, list[ast.AST]] = {}
         self._class_mros: dict[ast.ClassDef, list[ast.ClassDef]] = {}
         self._member_bindings: dict[tuple[ast.ClassDef, str], Binding | None] = {}
@@ -130,6 +137,11 @@ class ArgumentRenamer:
                             (id(owner), target_node.attr), []
                         ).append(assignment)
 
+    @cached_property
+    def frame_inspection(self) -> bool:
+        """Compute frame taint once, and only for passes that need it."""
+        return inspects_frames(self.nodes)
+
     @staticmethod
     def node_bindings(node: ast.AST) -> Sequence[Binding]:
         return cast(Sequence[Binding], node.__dict__.get("bindings") or ())
@@ -147,6 +159,13 @@ class ArgumentRenamer:
         return None
 
     def imported_path(self, node: ast.AST, seen: frozenset[int] = frozenset()) -> str | None:
+        if not seen:
+            if node not in self.imported_paths:
+                self.imported_paths[node] = self._imported_path(node, seen)
+            return self.imported_paths[node]
+        return self._imported_path(node, seen)
+
+    def _imported_path(self, node: ast.AST, seen: frozenset[int]) -> str | None:
         if id(node) in seen:
             return None
         seen |= {id(node)}
@@ -1202,7 +1221,7 @@ class ArgumentRenamer:
         reflected: set[Function] = set()
         by_name: dict[str, list[Function]] = {}
         methods_by_name: dict[str, list[Function]] = {}
-        if inspects_frames(self.nodes):
+        if self.frame_inspection:
             # Stack/frame APIs can inspect any active scope, not just a known
             # function object. There is no safe cross-module rename in that case.
             reflected.update(self.functions)
@@ -1422,14 +1441,18 @@ class ArgumentRenamer:
         return calls, blocked, reflected
 
     def run(self) -> None:
+        self._run(None)
+
+    def _run(self, call_analysis: CallAnalysis | None) -> None:
         self._definitions.clear()
         self._class_mros.clear()
         self._member_bindings.clear()
         self.root_hints.clear()
         self.hint_cache.clear()
+        self.imported_paths.clear()
         self.renamed = 0
         self.skipped.clear()
-        calls, blocked, reflected = self.analyze_calls()
+        calls, blocked, reflected = call_analysis or self.analyze_calls()
         for function in self.functions:
             tree = self.trees[self.modules[function]]
             parameters = function.args.posonlyargs + function.args.args + function.args.kwonlyargs

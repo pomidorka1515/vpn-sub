@@ -6,7 +6,7 @@ import pytest
 import python_minifier
 from python_minifier.module_printer import ModulePrinter
 
-from obfuscator.minifier import _BufferedModulePrinter, _Fragments, minify
+from obfuscator.minifier import _BufferedModulePrinter, _Fragments, _PreservedNames, minify
 
 __all__: list[str] = []
 
@@ -50,3 +50,20 @@ def test_minifier_preserves_dependency_behavior_without_global_patching() -> Non
     original = python_minifier.minify
     assert minify(source, rename_globals=True) == original(source, rename_globals=True)
     assert python_minifier.minify is original
+
+
+def test_indexed_preserved_names_match_plain_minifier_lists() -> None:
+    source = (
+        "from math import ceil\n"
+        "def long_name(value):\n"
+        "    preserved_local = ceil(value)\n"
+        "    return preserved_local + value\n"
+        "result = long_name(3)\n"
+    )
+    locals_ = ["value", "preserved_local"]
+    globals_ = ["long_name", "result"]
+    expected = minify(source, rename_globals=True, preserve_locals=locals_.copy(), preserve_globals=globals_.copy())
+    assert minify(
+        source, rename_globals=True,
+        preserve_locals=_PreservedNames(locals_), preserve_globals=_PreservedNames(globals_),
+    ) == expected

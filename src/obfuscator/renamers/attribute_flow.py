@@ -179,6 +179,7 @@ class AttributeFlow:
                         for contained in self.contained_owners(self.value(parent.value)):
                             self.field_containers.setdefault(contained, set()).add(owner)
         self.exposed_owners: dict[frozenset[ast.ClassDef], set[ast.ClassDef]] = {}
+        self.contained_cache: dict[Value, frozenset[ast.ClassDef]] = {}
 
     def record_fields(self, owner: ast.ClassDef) -> tuple[bool, dict[str, ast.expr | None]] | None:
         """Recognize dataclasses with a generated, ordinary field-storing initializer."""
@@ -1282,6 +1283,9 @@ class AttributeFlow:
             self.context_active.remove(function)
             self.arguments, self.values = old_arguments, old_values
             self.container_items, self.container_values = old_items, old_mapping
+            # Contexts can update synthetic argument packs shared with later
+            # queries, even though the container maps themselves are restored.
+            self.contained_cache.clear()
 
     def prepare_contexts(self, family: set[ast.ClassDef]) -> None:
         identity = frozenset(family)
@@ -1466,6 +1470,12 @@ class AttributeFlow:
                 raise ValueError(f"Escaping allowlisted attribute receiver: {self.describe(call)}; unverifiable arguments")
 
     def contained_owners(self, value: Value) -> set[ast.ClassDef]:
+        # Once the monotone solve completes, container contents are stable in
+        # ordinary queries. Context-sensitive checks temporarily replace them,
+        # so never reuse or populate this cache while visiting a context.
+        cached = getattr(self, "contained_cache", None)
+        if cached is not None and not self.context_active and value in cached:
+            return set(cached[value])
         owners = set(value.owners)
         pending = list(value.containers)
         seen: set[ast.expr] = set()
@@ -1483,6 +1493,8 @@ class AttributeFlow:
                 items = items.merge(self.result(callback.function, frozenset()))
             owners.update(items.owners)
             pending.extend(items.containers - seen)
+        if cached is not None and not self.context_active:
+            cached[value] = frozenset(owners)
         return owners
 
     def exposes(self, value: Value, family: set[ast.ClassDef]) -> bool:
