@@ -389,8 +389,9 @@ class AnnotationIndex:
                 continue
             key = f"{path}.{parameter.name}"
             names.append(key)
+            bound = self._hint(parameter.bound) if isinstance(parameter, ast.TypeVar) and parameter.bound is not None else TypeHint()
             self.parameters[parameter.name] = (
-                TypeHint((key,), origin="parameter")
+                TypeHint((key,), origin="parameter", arguments=(bound,) if bound else ())
                 if isinstance(parameter, ast.TypeVar) else TypeHint(incomplete=True)
             )
         node.__dict__["type_parameters"] = tuple(names)

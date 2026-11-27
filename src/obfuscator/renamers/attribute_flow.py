@@ -530,6 +530,49 @@ class AttributeFlow:
         self.reaching[node] = resolved or definitions
         return self.reaching[node]
 
+    def guarded_receivers(self, node: ast.Name) -> frozenset[ast.ClassDef]:
+        """Follow a straight-line, terminating negative isinstance guard."""
+        scope = self.enclosing_function(node)
+        if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return frozenset()
+        binding = self.analysis.bindings.get(node)
+        if binding is None or any(isinstance(ref, (ast.Global, ast.Nonlocal)) for ref in binding.references):
+            return frozenset()
+        statement: ast.AST = node
+        while self.analysis.parents.get(statement) is not scope:
+            parent = self.analysis.parents.get(statement)
+            if parent is None or isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                return frozenset()
+            statement = parent
+        if statement not in scope.body:
+            return frozenset()
+        if any(
+            isinstance(part, ast.Name) and isinstance(part.ctx, (ast.Store, ast.Del))
+            and self.analysis.bindings.get(part) is binding
+            for part in ast.walk(statement)
+        ):
+            return frozenset()
+        index = scope.body.index(statement)
+        for previous in reversed(scope.body[:index]):
+            if isinstance(previous, ast.If) and not previous.orelse and len(previous.body) == 1 and isinstance(previous.body[0], ast.Raise):
+                test = previous.test
+                if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not) and isinstance(test.operand, ast.Call):
+                    call = test.operand
+                    builtin = self.analysis.bindings.get(call.func)
+                    if (isinstance(cast(object, builtin), BuiltinBinding) and getattr(builtin, "name", "") == "isinstance"
+                            and len(call.args) == 2 and not call.keywords
+                            and isinstance(call.args[0], ast.Name) and self.analysis.bindings.get(call.args[0]) is binding):
+                        owner = self.analysis.target(call.args[1], instances=False)
+                        if isinstance(owner, ast.ClassDef) and not any(base.keywords for base in self.analysis.mro(owner)):
+                            return self.analysis.receiver_family(owner)
+            if any(
+                isinstance(part, ast.Name) and isinstance(part.ctx, (ast.Store, ast.Del))
+                and self.analysis.bindings.get(part) is binding
+                for part in ast.walk(previous)
+            ):
+                return frozenset()
+        return frozenset()
+
     def value(self, node: ast.AST, seen: frozenset[ast.AST] = frozenset()) -> Value:
         if node in seen:
             return _BOTTOM
@@ -542,6 +585,10 @@ class AttributeFlow:
         self._value_stack.append(dependencies)
         try:
             value = self.expression(node, seen)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and value.unknown:
+                guarded = self.guarded_receivers(node)
+                if guarded:
+                    value = Value(guarded)
             if isinstance(node, ast.expr) and node in self.analysis.parents and not value.owners and not value.functions and not value.containers:
                 owners = self.static_receiver(node)
                 if owners:
@@ -1515,6 +1562,31 @@ class AttributeFlow:
         except (ImportError, AttributeError, ValueError, TypeError):
             return False
 
+    def task_callback_registration(self, call: ast.Call, argument: ast.expr) -> bool:
+        """Recognize a callback stored by a task from the standard asyncio factory."""
+        if (not isinstance(call.func, ast.Attribute) or call.func.attr != "add_done_callback"
+                or len(call.args) != 1 or call.args[0] is not argument or call.keywords):
+            return False
+        receiver = call.func.value
+        seen: set[ast.AST] = set()
+        while isinstance(receiver, ast.Name) and receiver not in seen:
+            seen.add(receiver)
+            binding = self.analysis.bindings.get(receiver)
+            definitions = self.analysis.definitions(binding) if binding is not None else []
+            if len(definitions) != 1 or not isinstance(definitions[0], ast.Name):
+                return False
+            assignment = self.analysis.parents.get(definitions[0])
+            if not isinstance(assignment, (ast.Assign, ast.AnnAssign)) or assignment.value is None:
+                return False
+            if isinstance(assignment, ast.Assign) and assignment.targets != [definitions[0]]:
+                return False
+            if isinstance(assignment, ast.AnnAssign) and assignment.target is not definitions[0]:
+                return False
+            receiver = assignment.value
+        return isinstance(receiver, ast.Call) and self.analysis.imported_path(receiver.func) in {
+            "asyncio.create_task", "asyncio.tasks.create_task",
+        }
+
     def verify_call(self, call: ast.Call, family: set[ast.ClassDef]) -> None:
         if self.descriptor_binding(call) is not None or self.wraps_call(call):
             return
@@ -1557,6 +1629,7 @@ class AttributeFlow:
                     if (callback.bound and isinstance(owner, ast.ClassDef)
                         and (owner in family or bool(callback.receivers & family))
                         and not self.quart_callback_registration(call, argument)
+                        and not self.task_callback_registration(call, argument)
                     ):
                         raise ValueError(
                             f"Escaping allowlisted attribute receiver through bound callback: {ast.unparse(call)!r}"

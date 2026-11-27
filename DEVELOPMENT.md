@@ -434,6 +434,9 @@ parameters, literal `**kwargs`, defaults, aliases, bound methods, callback forwa
 returns, and internal instance fields. Failed argument matching on a bound callback
 preserves its captured receiver when decorators are proven to retain the original
 binding; uncertainty still applies to explicit arguments and unverifiable decorators.
+Straight-line `if not isinstance(value, Class): raise ...` guards also establish
+internal receiver families until the value is rebound. Subclass overrides remain
+subject to the usual polymorphic member checks.
 Local callback rebindings follow statement order and conditional branches, including
 successful `try` paths whose error handlers return. Later method binding cannot flow
 back into an earlier wrapper application. Stdlib `functools.wraps` copies callable
@@ -451,6 +454,10 @@ Quart's serving, request and websocket hook registrations, and `add_url_rule`
 view-function registrations, are exceptions for bound callbacks: Quart stores
 and invokes them without inspecting their receivers; callback bodies are still
 checked. Unsupported registration methods still fail closed.
+Likewise, `add_done_callback` accepts a bound callback when its receiver is traced
+through single-assignment aliases to `asyncio.create_task`. This assumes the event
+loop's task factory preserves the standard callback-registration behavior; custom
+task factories that inspect callback receivers do not satisfy that contract.
 For the supported Quart serving, request and websocket hooks, bound-method
 parameters can also be renamed because Quart passes hook arguments positionally.
 This does not apply to route view functions, which may receive URL keywords.
@@ -492,6 +499,9 @@ unresolved substitutions do not establish receiver types. Generic calls bind
 defaults, positional-only/keyword-only arguments, fixed tuple expansions, literal
 keyword dictionaries, and ordinary variadic arguments before substituting return
 shapes. Unknown expansions and invalid bindings cannot prove a receiver type.
+Method lookup on a bounded type parameter follows its complete internal class family,
+including concrete consumers of folded mixins. Unresolved bounds and competing
+method implementations remain errors.
 Visible custom containers use annotated `__iter__`/`__next__`, async iteration,
 and `__getitem__` protocols; generic arguments are projected through visible
 parameterized base classes rather than adding each container to a name table.

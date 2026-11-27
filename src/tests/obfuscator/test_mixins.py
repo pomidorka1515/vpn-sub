@@ -197,6 +197,54 @@ class FeatureMixin:
     )
 
 
+def test_generic_bound_to_folded_mixin_resolves_method_receiver() -> None:
+    sources = _database(
+        """
+from .helpers import invoke
+class FeatureMixin:
+    def check(self): return 7
+    def run(self): return invoke(self)
+""",
+        "class Database(FeatureMixin): pass\n__result__ = Database().run()\n",
+    )
+    sources[Path("db/helpers.py")] = """
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .features import FeatureMixin as Bound
+def invoke[T: Bound](value: T):
+    def wrapper(item: T): return item.check()
+    return wrapper(value)
+"""
+    result = obfuscate_modules(sources, ["f:Database:check"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+    assert "f:Database:check" in result.renames
+
+
+def test_generic_bound_to_shared_mixin_rejects_ambiguous_consumers() -> None:
+    sources = {
+        Path("bots/telegram/common.py"): """
+class SharedMixin:
+    def check(self): return 7
+    def run(self): return invoke(self)
+def invoke[T: SharedMixin](value: T): return value.check()
+""",
+        Path("bots/telegram/admin/bot.py"): """
+from ..common import SharedMixin
+class TelegramAdminBot(SharedMixin): pass
+__admin__ = TelegramAdminBot().run()
+""",
+        Path("bots/telegram/public/bot.py"): """
+from ..common import SharedMixin
+class TelegramPublicBot(SharedMixin): pass
+__public__ = TelegramPublicBot().run()
+""",
+    }
+    with pytest.raises(ValueError, match="Ambiguous polymorphic"):
+        obfuscate_modules(sources, ["f:TelegramAdminBot:check"], jobs=1)
+
+
 def test_colliding_mixin_names_and_immutable_data_reads(monkeypatch: pytest.MonkeyPatch) -> None:
     sources = {
         Path("db/one.py"): "class FeatureMixin:\n    VERSION = 3\n    def one(self): return 1\n",

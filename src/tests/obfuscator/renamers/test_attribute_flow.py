@@ -411,6 +411,66 @@ def test_external_bound_callback_on_selected_receiver_is_rejected() -> None:
         AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
 
 
+@pytest.mark.parametrize("linked", [False, True])
+def test_asyncio_task_callback_tracks_renamed_receiver(linked: bool) -> None:
+    source = """
+import asyncio
+from asyncio import create_task as spawn
+class Record:
+    def __init__(self): self._value = 7
+    def completed(self, task): self._value += task.result()
+    async def run(self):
+        async def work(): return 2
+        task = spawn(work())
+        alias = task
+        alias.add_done_callback(self.completed)
+        await task
+        await asyncio.sleep(0)
+        return self._value
+record = Record()
+__result__ = asyncio.run(record.run())
+"""
+    if linked:
+        result = obfuscate_modules({Path("main.py"): source}, ["attr:Record:_value"], jobs=1)
+        namespace: dict[str, Any] = {}
+        exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    else:
+        namespace = execute(source)
+    assert namespace["__result__"] == 9
+
+
+@pytest.mark.parametrize("setup", [
+    "task = external",
+    "task = asyncio.create_task(work()); task = external",
+    "task = create_task(work())",
+])
+def test_unverified_task_callback_registration_is_rejected(setup: str) -> None:
+    source = RECORD + f"""
+import asyncio
+def create_task(work): return external
+async def work(): pass
+async def register():
+    {setup}
+    task.add_done_callback(record.__init__)
+"""
+    with pytest.raises(ValueError, match="through bound callback"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
+def test_asyncio_task_callback_body_still_checked() -> None:
+    source = """
+import asyncio
+class Record:
+    def __init__(self): self._value = 7
+    def completed(self, task): external(self)
+    async def run(self):
+        task = asyncio.create_task(work())
+        task.add_done_callback(self.completed)
+"""
+    with pytest.raises(ValueError, match="Escaping allowlisted attribute receiver"):
+        AllowlistRenamer(ast.parse(source)).apply(["attr:Record:_value"])
+
+
 @pytest.mark.parametrize("method", ["before_serving", "after_serving"])
 def test_quart_lifecycle_registration_accepts_bound_callback(method: str) -> None:
     source = f"""

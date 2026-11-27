@@ -233,6 +233,16 @@ class AllowlistRenamer(ArgumentRenamer):
             self.receiver_families[owner] = family
         return family
 
+    def parameter_bound_receivers(self, node: ast.expr, seen: set[int] | None = None) -> set[ast.ClassDef]:
+        """Resolve the complete internal family of a bounded generic receiver."""
+        hint = self.canonical_hint(self.value_hint(node, seen))
+        if hint.origin == "parameter" and len(hint.arguments) == 1:
+            bound = hint.arguments[0]
+            if not bound.incomplete and bound.classes and all(path in self.annotation_classes for path in bound.classes):
+                owners = self.hint_types(bound, self.enclosing_class(node))
+                return {cls for owner in owners for cls in self.receiver_family(owner)}
+        return set()
+
     def receiver(self, node: ast.expr, seen: set[int] | None = None) -> tuple[set[ast.ClassDef], bool]:
         """Return possible classes and whether this is a polymorphic self/cls."""
         owner: ast.AST | str | None
@@ -327,9 +337,13 @@ class AllowlistRenamer(ArgumentRenamer):
         if inherited is not None:
             return inherited
         hint = self.value_hint(node.value, seen)
+        if hint.origin == "parameter" and len(hint.arguments) == 1:
+            hint = self.canonical_hint(hint.arguments[0])
         if hint.incomplete or any(path not in self.annotation_classes and path != "types.NoneType" for path in hint.classes):
             return set()
-        owners, _ = self.receiver(node.value, seen)
+        owners = self.parameter_bound_receivers(node.value, seen)
+        if not owners:
+            owners, _ = self.receiver(node.value, seen)
         return {
             binding for owner in owners if (binding := self.member(owner, node.attr)) is not None
         }
@@ -996,7 +1010,7 @@ class AllowlistRenamer(ArgumentRenamer):
                     targets = {member for member in members if member is not None}
                 affected = targets & watched
                 if affected:
-                    owners = self.receiver(node.value)[0] if flow_owners is None else flow_owners
+                    owners = (self.parameter_bound_receivers(node.value) or self.receiver(node.value)[0]) if flow_owners is None else flow_owners
                     if len(targets) != 1 or any(
                         self.member(owner, node.attr) is None
                         and any((id(base), node.attr) in self.instance_assignments for base in self.mro(owner))

@@ -20,6 +20,106 @@ from tests.support.obfuscator import allowlisted
 __all__: list[str] = []
 
 
+def test_bounded_generic_method_receiver_uses_all_subclasses() -> None:
+    source = """
+class Base:
+    def check(self): return 7
+class Child(Base): pass
+def invoke[T: Base](value: T):
+    def wrapper(item: T): return item.check()
+    return wrapper(value)
+__result__ = invoke(Child())
+"""
+    result = obfuscate_modules({Path("main.py"): source}, ["f:Base:check"], jobs=1)
+    namespace: dict[str, Any] = {}
+    exec(result.source, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    assert namespace["__result__"] == 7
+    assert "f:Base:check" in result.renames
+
+
+def test_bounded_generic_method_receiver_rejects_subclass_override() -> None:
+    source = """
+class Base:
+    def check(self): return 7
+class Child(Base):
+    def check(self): return 8
+def invoke[T: Base](value: T): return value.check()
+__result__ = invoke(Base()), invoke(Child())
+"""
+    with pytest.raises(ValueError, match="Ambiguous polymorphic"):
+        obfuscate_modules({Path("main.py"): source}, ["f:Base:check"], jobs=1)
+
+
+@pytest.mark.parametrize("bound", ["", ": Missing", ": Base | Missing"])
+def test_unresolved_generic_bound_does_not_prove_receiver(bound: str) -> None:
+    source = f"""
+class Base:
+    def check(self): return 7
+def invoke[T{bound}](value: T): return value.check()
+invoke(unknown())
+Base().check()
+"""
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        obfuscate_modules({Path("main.py"): source}, ["f:Base:check"], jobs=1)
+
+
+def test_method_receiver_after_terminating_isinstance_guard() -> None:
+    source = """
+class Service:
+    def check(self): return 7
+class Child(Service): pass
+def invoke():
+    value = external()
+    if not isinstance(value, Service):
+        raise TypeError()
+    return value.check()
+"""
+    result, _ = allowlisted(source, ["f:Service:check"])
+    namespace: dict[str, Any] = {}
+    exec(result, namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
+    namespace["external"] = namespace["Child"]
+    assert namespace["invoke"]() == 7
+    namespace["external"] = object
+    with pytest.raises(TypeError):
+        namespace["invoke"]()
+
+
+@pytest.mark.parametrize(("guard", "between", "call"), [
+    ("if not isinstance(value, Service): raise TypeError()", "value = external()", "value.check()"),
+    ("if not isinstance(value, Service): raise TypeError()", "", "(value := external(), value.check())"),
+    ("if not isinstance(value, Service): pass", "", "value.check()"),
+    ("if isinstance(value, Service): raise TypeError()", "", "value.check()"),
+    ("if not fake(value, Service): raise TypeError()", "", "value.check()"),
+])
+def test_isinstance_guard_does_not_hide_unverified_receivers(guard: str, between: str, call: str) -> None:
+    source = f"""
+class Service:
+    def check(self): return 7
+def invoke():
+    value = external()
+    {guard}
+    {between or 'pass'}
+    return {call}
+"""
+    with pytest.raises(ValueError, match="Unresolved receiver"):
+        allowlisted(source, ["f:Service:check"])
+
+
+def test_isinstance_guard_does_not_hide_subclass_override() -> None:
+    source = """
+class Service:
+    def check(self): return 7
+class Child(Service):
+    def check(self): return 8
+def invoke():
+    value = external()
+    if not isinstance(value, Service): raise TypeError()
+    return value.check()
+"""
+    with pytest.raises(ValueError, match="Ambiguous polymorphic"):
+        allowlisted(source, ["f:Service:check"])
+
+
 @pytest.mark.parametrize("factory", ["Path(path).open", "file_path.open"])
 def test_optional_external_file_method_factory_in_cleanup(factory: str) -> None:
     source = f"""
