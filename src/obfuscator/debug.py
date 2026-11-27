@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import cast
@@ -14,6 +15,28 @@ from python_minifier.transforms.remove_pass import RemovePass
 __all__: list[str] = ["annotate_debug", "record_attribute"]
 
 type Definition = ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+_AST_LOCATION_ATTRIBUTES: tuple[str, ...] = ("lineno", "col_offset", "end_lineno", "end_col_offset")
+
+
+def _clone_ast_value(value: object) -> object:
+    if isinstance(value, ast.AST):
+        return _clone_ast(value)
+    if isinstance(value, list):
+        return [_clone_ast_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_ast_value(item) for item in value)
+    return value
+
+
+def _clone_ast(node: ast.AST) -> ast.AST:
+    clone = copy.copy(node)
+    clone.__dict__.clear()
+    for field in type(node)._fields:
+        setattr(clone, field, _clone_ast_value(getattr(node, field)))
+    for attribute in _AST_LOCATION_ATTRIBUTES:
+        if attribute in node.__dict__:
+            setattr(clone, attribute, getattr(node, attribute))
+    return clone
 
 
 def record_attribute(owner: ast.ClassDef, original: str, renamed: str) -> None:
@@ -37,7 +60,7 @@ def _definitions(tree: ast.AST) -> list[Definition]:
 def _surviving_definitions(tree: ast.Module) -> list[Definition]:
     # Mirror the minifier's branch pruning on a fresh tree so definitions in
     # removed branches cannot shift the original-name mappings of later ones.
-    shadow = ast.parse(ast.unparse(tree))
+    shadow = _clone_ast(tree)
     originals = dict(zip(_definitions(shadow), _definitions(tree), strict=True))
     for operation in (add_parent, add_namespace):
         cast(Callable[[ast.Module], None], operation)(shadow)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 from dataclasses import replace
 from functools import cache
 from typing import TYPE_CHECKING, Never, cast
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 __all__: list[str] = ["fold_mixins", "mark_mixin_origins"]
+
+_AST_LOCATION_ATTRIBUTES: tuple[str, ...] = ("lineno", "col_offset", "end_lineno", "end_col_offset")
 
 _ROOTS: dict[str, tuple[tuple[str, str], ...]] = {
     "api.admin": (("api.admin.routes", "AsyncApi"),),
@@ -67,6 +70,27 @@ _HOOKS: frozenset[str] = frozenset(
         "__qualname__",
     }
 )
+
+
+def _clone_ast_value(value: object) -> object:
+    if isinstance(value, ast.AST):
+        return _clone_ast(value)
+    if isinstance(value, list):
+        return [_clone_ast_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_ast_value(item) for item in value)
+    return value
+
+
+def _clone_ast(node: ast.AST) -> ast.AST:
+    clone = copy.copy(node)
+    clone.__dict__.clear()
+    for field in type(node)._fields:
+        setattr(clone, field, _clone_ast_value(getattr(node, field)))
+    for attribute in _AST_LOCATION_ATTRIBUTES:
+        if attribute in node.__dict__:
+            setattr(clone, attribute, getattr(node, attribute))
+    return clone
 
 
 def mark_mixin_origins(tree: ast.Module, module: str) -> None:
@@ -791,9 +815,10 @@ def fold_mixins(tree: ast.Module, modules: Iterable[str]) -> int:
             # then parse a clean copy without stale linker/renamer metadata.
             originals = [(call, call.func) for call in calls if call in replacements]
             rewritten.visit(definition)
+            ast.fix_missing_locations(definition)
             method = cast(
                 ast.FunctionDef | ast.AsyncFunctionDef,
-                ast.parse(ast.unparse(ast.fix_missing_locations(definition))).body[0],
+                _clone_ast(definition),
             )
             for original_node, copied_node in zip(
                 ast.walk(definition), ast.walk(method), strict=True

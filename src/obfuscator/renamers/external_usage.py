@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
 import inspect
 import typing
 from importlib import import_module
-from textwrap import dedent
 from types import FunctionType
 
-from .external import _static_member
+from .external import _external_tree, _static_member
 
 __all__: list[str] = []
 
@@ -39,7 +39,7 @@ class ExternalUsage:
 
     def summarize(self, consumer: type | FunctionType, parameter: str,
                   active: frozenset[tuple[type | FunctionType, str]]) -> frozenset[str] | None:
-        tree = ast.parse(dedent(inspect.getsource(consumer)))
+        tree = copy.deepcopy(_external_tree(consumer))
         root = tree.body[0]
         if isinstance(root, ast.ClassDef) and root.decorator_list:
             return None
@@ -55,11 +55,11 @@ class ExternalUsage:
                     if name in {"__class_getitem__", "__init_subclass__", "__subclasshook__"}:
                         continue
                     if isinstance(member, FunctionType):
-                        root.body.extend(ast.parse(dedent(inspect.getsource(member))).body)
+                        root.body.extend(copy.deepcopy(_external_tree(member)).body)
                     elif isinstance(member, property):
                         for accessor in (member.fget, member.fset, member.fdel):
                             if accessor is not None:
-                                root.body.extend(ast.parse(dedent(inspect.getsource(accessor))).body)
+                                root.body.extend(copy.deepcopy(_external_tree(accessor)).body)
                     elif inspect.isroutine(member):
                         return None
         nodes = list(ast.walk(root))

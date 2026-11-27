@@ -8,6 +8,7 @@ import typing
 from abc import ABCMeta
 from collections import deque
 from dataclasses import replace
+from functools import lru_cache
 from importlib import import_module
 from textwrap import dedent
 from types import (
@@ -30,6 +31,21 @@ if TYPE_CHECKING:
     from .allowlist import AllowlistRenamer
 
 __all__: list[str] = []
+
+type SourceOwner = type | FunctionType | ModuleType
+
+
+@lru_cache(maxsize=4096)
+def _external_source(owner: SourceOwner) -> str:
+    """Read and normalize an external definition once for the whole build."""
+    return dedent(inspect.getsource(owner))
+
+
+@lru_cache(maxsize=4096)
+def _external_tree(owner: SourceOwner) -> ast.Module:
+    """Parse a cached external definition once; callers must treat it as read-only."""
+    return ast.parse(_external_source(owner))
+
 
 _MISSING: object = object()
 _MODULE_CLASS_NAMES: frozenset[str] = frozenset(
@@ -170,7 +186,7 @@ class ExternalReturns:
         if not isinstance(function, FunctionType):
             return TypeHint()
         if function not in self.annotations:
-            tree = ast.parse(dedent(inspect.getsource(function)))
+            tree = _external_tree(function)
             definition = tree.body[0]
             self.annotations[function] = definition.returns if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)) else None
             if isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -233,7 +249,7 @@ class ExternalReturns:
         module_name, _, name = path.rpartition(".")
         if module_name not in self.sources:
             module = import_module(module_name)
-            tree = ast.parse(inspect.getsource(module))
+            tree = _external_tree(module)
             index = AnnotationIndex(module_name, tree, is_package=hasattr(module, "__path__"))
             declarations: dict[str, ast.expr | ast.ClassDef | None] = {}
             pending = list(tree.body)
@@ -633,7 +649,7 @@ class ExternalMembers:
         module = inspect.getmodule(implementation)
         if module is None:
             raise ValueError("external base has no implementation module")
-        tree = ast.parse(dedent(inspect.getsource(implementation)))
+        tree = _external_tree(implementation)
         names: set[str] = set()
         nodes = list(ast.walk(tree))
         locals_ = {

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import ast
 import inspect
+from collections import UserDict, deque
 from dataclasses import dataclass
 from types import FunctionType
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, overload
 
 from python_minifier.rename.binding import BuiltinBinding
 
@@ -12,6 +13,8 @@ from .external import ExternalReturns
 from .external_usage import ExternalUsage
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, ItemsView, Iterator, KeysView, ValuesView
+
     from ..analysis import Binding, Function
     from .allowlist import AllowlistRenamer
 
@@ -52,6 +55,58 @@ class Value:
 
 _BOTTOM: Value = Value()
 _UNKNOWN: Value = Value(unknown=True)
+_ALL_KEYS: object = object()
+
+
+class _TrackedMap[K, V](UserDict[K, V]):
+    """A small map facade that records data-flow reads for the worklist."""
+
+    def __init__(self, category: str, on_read: Callable[[str, object], None], on_write: Callable[[str, object], None]) -> None:
+        super().__init__()
+        self.category: str = category
+        self.on_read: Callable[[str, object], None] = on_read
+        self.on_write: Callable[[str, object], None] = on_write
+
+    def __getitem__(self, key: K) -> V:
+        self.on_read(self.category, key)
+        return super().__getitem__(key)
+
+    def __setitem__(self, key: K, value: V) -> None:
+        super().__setitem__(key, value)
+        self.on_write(self.category, key)
+
+    def __contains__(self, key: object) -> bool:
+        self.on_read(self.category, key)
+        return super().__contains__(key)
+
+    @overload
+    def get(self, key: K) -> V | None: ...
+
+    @overload
+    def get(self, key: K, default: V) -> V: ...
+
+    def get(self, key: K, default: V | None = None) -> V | None:
+        self.on_read(self.category, key)
+        return super().get(key, default)
+
+    def setdefault(self, key: K, default: V) -> V:
+        self.on_read(self.category, key)
+        if key not in self:
+            super().__setitem__(key, default)
+            self.on_write(self.category, key)
+        return super().__getitem__(key)
+
+    def keys(self) -> KeysView[K]:
+        self.on_read(self.category, _ALL_KEYS)
+        return super().keys()
+
+    def items(self) -> ItemsView[K, V]:
+        self.on_read(self.category, _ALL_KEYS)
+        return super().items()
+
+    def values(self) -> ValuesView[V]:
+        self.on_read(self.category, _ALL_KEYS)
+        return super().values()
 
 
 class AttributeFlow:
@@ -65,20 +120,36 @@ class AttributeFlow:
     def __init__(self, analysis: AllowlistRenamer) -> None:
         self.analysis: AllowlistRenamer = analysis
         self.nodes: list[ast.AST] = [node for node in analysis.nodes if id(node) not in analysis.annotation_nodes]
-        self.arguments: dict[Binding, Value] = {}
-        self.fields: dict[tuple[ast.ClassDef, str], Value] = {}
+        self._worklist: deque[ast.AST] | None = None
+        self._queued: set[ast.AST] = set()
+        self._active_node: ast.AST | None = None
+        self._current_dependencies: set[tuple[str, object]] = set()
+        self._node_dependencies: dict[ast.AST, set[tuple[str, object]]] = {}
+        self._dependents: dict[tuple[str, object], set[ast.AST]] = {}
+        self._value_stack: list[set[tuple[str, object]]] = []
+        self._value_dependencies: dict[ast.AST, set[tuple[str, object]]] = {}
+        self.values: dict[ast.AST, Value] = {}
+        self.arguments: _TrackedMap[Binding, Value] = _TrackedMap(
+            "arguments", self._state_read, self._state_changed
+        )
+        self.fields: _TrackedMap[tuple[ast.ClassDef, str], Value] = _TrackedMap(
+            "fields", self._state_read, self._state_changed
+        )
         self.external_types: dict[str, type | None] = {}
         self.external_returns: ExternalReturns = ExternalReturns(analysis)
         self.external_usage: ExternalUsage = ExternalUsage()
-        self.values: dict[ast.AST, Value] = {}
         self.static_receivers: dict[ast.expr, frozenset[ast.ClassDef]] = {}
         self.static_targets: dict[ast.expr, ast.AST | str | None] = {}
         self.local_forwarders: dict[ast.FunctionDef, bool] = {}
         self.argument_bindings: dict[tuple[ast.Call, CallableValue], dict[ast.arg, ast.expr] | None] = {}
         self.reaching: dict[ast.Name, list[ast.AST]] = {}
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
-        self.container_items: dict[ast.expr, Value] = {}
-        self.container_values: dict[ast.expr, Value] = {}
+        self.container_items: _TrackedMap[ast.expr, Value] = _TrackedMap(
+            "container_items", self._state_read, self._state_changed
+        )
+        self.container_values: _TrackedMap[ast.expr, Value] = _TrackedMap(
+            "container_values", self._state_read, self._state_changed
+        )
         self.mapping_views: set[ast.Call] = set()
         self.zipped: dict[ast.Call, ast.Tuple] = {}
         self.sequence_sources: dict[ast.Tuple, tuple[ast.expr | None, ...]] = {}
@@ -180,6 +251,45 @@ class AttributeFlow:
                             self.field_containers.setdefault(contained, set()).add(owner)
         self.exposed_owners: dict[frozenset[ast.ClassDef], set[ast.ClassDef]] = {}
         self.contained_cache: dict[Value, frozenset[ast.ClassDef]] = {}
+
+    def _enqueue(self, node: ast.AST) -> None:
+        if self._worklist is not None and node not in self._queued:
+            self._queued.add(node)
+            self._worklist.append(node)
+
+    def _state_read(self, category: str, key: object) -> None:
+        if self._active_node is None:
+            return
+        dependency = category, key
+        self._current_dependencies.add(dependency)
+        self._node_dependencies.setdefault(self._active_node, set()).add(dependency)
+        self._dependents.setdefault(dependency, set()).add(self._active_node)
+        for dependencies in self._value_stack:
+            dependencies.add(dependency)
+
+    def _state_changed(self, category: str, key: object) -> None:
+        self.values.clear()
+        for dependency in ((category, key), (category, _ALL_KEYS)):
+            for node in tuple(self._dependents.get(dependency, ())):
+                self._enqueue(node)
+        if self._active_node is not None:
+            self._enqueue(self._active_node)
+
+    def _record_value_dependency(self, dependency: tuple[str, object]) -> None:
+        if self._active_node is None:
+            return
+        self._state_read(*dependency)
+
+    def _begin_node(self, node: ast.AST) -> None:
+        for dependency in self._node_dependencies.pop(node, ()):
+            self._dependents.get(dependency, set()).discard(node)
+        self._active_node = node
+        self._current_dependencies = set()
+        self.changed = False
+
+    def _end_node(self) -> None:
+        self._active_node = None
+        self._current_dependencies = set()
 
     def record_fields(self, owner: ast.ClassDef) -> tuple[bool, dict[str, ast.expr | None]] | None:
         """Recognize dataclasses with a generated, ordinary field-storing initializer."""
@@ -428,12 +538,22 @@ class AttributeFlow:
             return _BOTTOM
         cached = self.values.get(node)
         if cached is not None:
+            for dependency in self._value_dependencies.get(node, ()):
+                self._record_value_dependency(dependency)
             return cached
-        value = self.expression(node, seen)
-        if isinstance(node, ast.expr) and node in self.analysis.parents and not value.owners and not value.functions and not value.containers:
-            owners = self.static_receiver(node)
-            if owners:
-                value = Value(owners, unknown=self.analysis.value_hint(node).incomplete)
+        dependencies: set[tuple[str, object]] = set()
+        self._value_stack.append(dependencies)
+        try:
+            value = self.expression(node, seen)
+            if isinstance(node, ast.expr) and node in self.analysis.parents and not value.owners and not value.functions and not value.containers:
+                owners = self.static_receiver(node)
+                if owners:
+                    value = Value(owners, unknown=self.analysis.value_hint(node).incomplete)
+        finally:
+            self._value_stack.pop()
+        self._value_dependencies[node] = dependencies
+        for dependency in dependencies:
+            self._record_value_dependency(dependency)
         self.values[node] = value
         return value
 
@@ -940,19 +1060,32 @@ class AttributeFlow:
             self.open_callbacks(self.value(expression))
 
     def solve(self) -> None:
-        # Plain name stores never participate in the transfer function. Keep
-        # the remaining nodes in their original order: each round observes
-        # the same sequence of argument/field updates as a full tree scan.
+        # Plain name stores never participate in the transfer function. Start
+        # with the remaining nodes, then let state updates enqueue only nodes
+        # that observed the changed argument, field, or container fact.
         nodes = [
             node for node in self.nodes
             if isinstance(node, (ast.Call, ast.Tuple, ast.List, ast.Set, ast.Dict, ast.ListComp, ast.SetComp, ast.GeneratorExp))
             or (isinstance(node, ast.Assign) and any(not isinstance(target, ast.Name) for target in node.targets))
             or (isinstance(node, ast.AnnAssign) and node.value is not None and not isinstance(node.target, ast.Name))
         ]
-        while True:
-            self.changed = False
-            self.values.clear()
-            for node in nodes:
+        queue: deque[ast.AST] = deque(nodes)
+        self._worklist = queue
+        self._queued = set(nodes)
+        self.values.clear()
+
+        def pending() -> Iterator[ast.AST]:
+            while queue:
+                node = queue.popleft()
+                self._queued.discard(node)
+                self._begin_node(node)
+                try:
+                    yield node
+                finally:
+                    self._end_node()
+
+        if nodes:
+            for node in pending():
                 if isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Attribute) and self.mapping_view(node):
                         self.mapping_views.add(node)
@@ -1089,8 +1222,8 @@ class AttributeFlow:
                     )
                     for element in elements:
                         self.open_callbacks(self.value(element))
-            if not self.changed:
-                break
+        self._worklist = None
+        self._queued.clear()
         self.values.clear()
 
     def add_container_value(self, container: ast.expr, key: Value, value: Value) -> None:

@@ -56,6 +56,7 @@ _STATEMENTS: frozenset[str] = frozenset(
         "vacuum",
     }
 )
+_STATEMENT_PREFIXES: frozenset[str] = _STATEMENTS | {"with"}
 
 
 class StrictParser(SQLiteParser):
@@ -79,6 +80,12 @@ def tokens(source: str) -> list[tuple[str, str]] | None:
             result.append((kind, match.group()))
         offset = match.end()
     return result
+
+
+def _starts_with_statement(source: str) -> bool:
+    """Reject ordinary literals before invoking the SQL tokenizer/parser."""
+    match = re.match(r"[A-Za-z]+", source.lstrip())
+    return match is not None and match.group().casefold() in _STATEMENT_PREFIXES
 
 
 class TriggerParser:
@@ -226,7 +233,7 @@ def minify_sql(source: str, *, preserve_edges: bool = False) -> str:
     """Remove only optional SQLite whitespace/comments from complete statements."""
     # Most application literals are names, keys, or other compact non-SQL data.
     # Without whitespace/comment markers there is nothing this pass can remove.
-    if _REMOVABLE.search(source) is None:
+    if _REMOVABLE.search(source) is None or not _starts_with_statement(source):
         return source
     parts = tokens(source)
     if not parts:
@@ -296,7 +303,10 @@ def minify_sql_literals(tree: ast.Module, *, executor: ProcessPoolExecutor | Non
             literals.append((node, node.value))
         pending.extend(ast.iter_child_nodes(node))
     values = list(dict.fromkeys(value for _, value in literals))
-    candidates = [value for value in values if _REMOVABLE.search(value) is not None]
+    candidates = [
+        value for value in values
+        if _REMOVABLE.search(value) is not None and _starts_with_statement(value)
+    ]
     replacements = dict(
         zip(
             candidates,
