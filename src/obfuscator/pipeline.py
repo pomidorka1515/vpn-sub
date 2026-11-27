@@ -111,6 +111,7 @@ def obfuscate_modules(
     *,
     jobs: int | None = None,
     progress: Callable[[str], None] | None = None,
+    verbose: Callable[[str], None] | None = None,
     debug: bool = False,
 ) -> ObfuscationResult:
     """Prepare, link, rename, and minify a set of relative application sources."""
@@ -120,6 +121,8 @@ def obfuscate_modules(
     if workers < 1:
         raise ValueError("jobs must be at least 1")
     workers = min(workers, len(originals))
+    if verbose is not None:
+        verbose(f"Using {workers} worker{'s' if workers != 1 else ''} for {len(originals)} modules")
     # Spawn is safe for library callers with threads, and does not inherit the
     # parent's application resources. Reuse the pool across all independent passes.
     with (
@@ -127,7 +130,7 @@ def obfuscate_modules(
         if workers > 1
         else nullcontext(None)
     ) as executor:
-        return _obfuscate_modules(originals, entries, executor, progress, debug=debug)
+        return _obfuscate_modules(originals, entries, executor, progress, verbose, debug=debug)
 
 
 type ProtocolKey = tuple[str, str]
@@ -171,12 +174,17 @@ def _obfuscate_modules(
     entries: list[str],
     executor: ProcessPoolExecutor | None,
     progress: Callable[[str], None] | None,
+    verbose: Callable[[str], None] | None,
     *,
     debug: bool = False,
 ) -> ObfuscationResult:
     def announce(stage: str) -> None:
         if progress is not None:
             progress(stage)
+
+    def detail(message: str) -> None:
+        if verbose is not None:
+            verbose(message)
 
     announce(f"Parsing {len(originals)} application modules")
     generic_classes: set[str] = set()
@@ -189,8 +197,18 @@ def _obfuscate_modules(
         if name in module_names:
             raise ValueError(f"ambiguous module name: {name}")
         module_names.add(name)
+    paths = list(originals)
+
+    def parsed_progress(count: int) -> None:
+        detail(f"Parsed module {count}/{len(paths)}: {paths[count - 1]}")
+
     for relative, (tree, classes, protocols, edges) in zip(
-        originals, ordered_map(executor, _parse_module, originals.items()), strict=True
+        originals,
+        ordered_map(
+            executor, _parse_module, originals.items(),
+            on_result=parsed_progress if verbose is not None else None,
+        ),
+        strict=True,
     ):
         parsed[relative] = tree
         generic_classes.update(classes)
@@ -206,23 +224,32 @@ def _obfuscate_modules(
             if derived not in protocol_classes:
                 protocol_classes.add(derived)
                 pending.append(derived)
+    detail(f"Discovered {len(generic_classes)} generic classes and {len(protocol_classes)} protocols")
+
+    def prepared_progress(count: int) -> None:
+        detail(f"Prepared module {count}/{len(paths)}: {paths[count - 1]}")
+
     prepared = ordered_map(
         executor,
         partial(
             _prepare_module, generic_classes=generic_classes, protocol_classes=protocol_classes
         ),
         parsed.items(),
+        on_result=prepared_progress if verbose is not None else None,
     )
     trees = {module_name(relative): tree for relative, tree in zip(parsed, prepared, strict=True)}
     announce("Linking modules and folding mixins")
     # Analyze the final lexical scope: module-qualified data references no
     # longer look like reflective escapes, and every internal caller is linked.
+    detail("Flattening module imports and references")
     linked = flatten(trees)
     # Analyze actual concrete method bodies, including lowered super dispatch,
     # rather than aliases to functions or the former mixin hierarchy.
+    detail("Folding mixin hierarchies")
     fold_mixins(linked, trees)
     # Folding introduces new lexical definitions. Track their original names
     # before automatic passes, just as the linker does for existing definitions.
+    detail("Recording original names")
     for node in ast.walk(linked):
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             node.__dict__.setdefault("original_name", node.name)
@@ -233,24 +260,33 @@ def _obfuscate_modules(
     announce("Eliminating dead code")
     eliminate_dead_code(linked)
     if entries:
+        detail(f"Checking {len(entries)} allowlist entries")
         AllowlistRenamer(linked).preflight(entries)
     announce("Analyzing dataclasses")
     minify_dataclasses(linked)
     linked_trees = {"__main__": linked}
     announce("Renaming private methods and parameters")
     methods = PrivateMethodRenamer(linked_trees)
+    detail("Analyzing and renaming private methods")
     methods.run()
     renamed_methods = methods.renamed
+    detail(f"Renamed {renamed_methods} private methods; analyzing parameters")
     methods.rename_parameters(reuse_calls=True)
     renamed_parameters = methods.renamed
     skipped_parameters = methods.skipped
+    detail(f"Renamed {renamed_parameters} parameters; preserved {skipped_parameters.total()}")
     del methods
     announce("Applying the rename allowlist")
     renames = AllowlistRenamer(linked).apply(entries) if entries else {}
+    detail(f"Applied {len(renames)} allowlist renames")
     announce("Minifying and validating app.min.py")
+    detail("Inlining constants")
     inline_constants(linked)
+    detail("Consolidating aliases")
     consolidate_aliases(linked)
+    detail("Optimizing imports")
     optimize_imports(linked)
+    detail("Shortening import names")
     shorten_imports(linked)
     return ObfuscationResult(
         source=minify_tree(
@@ -259,6 +295,7 @@ def _obfuscate_modules(
             rename_globals=True,
             executor=executor,
             debug=debug,
+            verbose=verbose,
         ),
         renames=renames,
         renamed_parameters=renamed_parameters,
@@ -313,14 +350,24 @@ def minify_tree(
     rename_locals: bool = True,
     executor: ProcessPoolExecutor | None = None,
     debug: bool = False,
+    verbose: Callable[[str], None] | None = None,
 ) -> str:
     """Shorten locals and, after linking, globals without changing runtime APIs."""
+    def detail(message: str) -> None:
+        if verbose is not None:
+            verbose(message)
+
+    detail("Minifying SQL literals")
     minify_sql_literals(tree, executor=executor)
+    detail("Renaming eligible constructor classes")
     rename_constructor_classes(tree)
+    detail("Rendering Python source")
     source = ast.unparse(tree)
     # Keep the planned class/function/parameter spellings: logs, callbacks and
     # keyword calls depend on these. Do the frame check during the same walk.
+    detail("Collecting names to preserve")
     preserved, reflected = _minify_metadata(tree)
+    detail(f"Running Python minifier ({len(preserved)} preserved names; reflection={reflected})")
     result = minify(
         source,
         filename=filename,
@@ -337,9 +384,11 @@ def minify_tree(
         remove_object_base=False,
         remove_builtin_exception_brackets=False,
     )
+    detail("Compiling generated Python for validation")
     compile(result, filename, "exec")
     result += "\n"
     if debug:
+        detail("Adding debug comments")
         result = annotate_debug(result, tree, filename)
     return result
 

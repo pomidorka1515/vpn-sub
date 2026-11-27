@@ -21,8 +21,18 @@ def ordered_map[T, R](
     values: Iterable[T],
     *,
     chunksize: int = 8,
+    on_result: Callable[[int], None] | None = None,
 ) -> list[R]:
     """Keep input order and propagate worker failures in serial and parallel mode."""
-    if executor is None:
-        return list(map(function, values))
-    return list(executor.map(function, values, chunksize=chunksize, buffersize=64))
+    results = (
+        map(function, values)
+        if executor is None
+        else executor.map(function, values, chunksize=chunksize, buffersize=64)
+    )
+    if on_result is None:
+        return list(results)
+    collected: list[R] = []
+    for result in results:
+        collected.append(result)
+        on_result(len(collected))
+    return collected

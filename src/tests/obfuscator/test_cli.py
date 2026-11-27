@@ -268,6 +268,42 @@ def test_cli_always_warns_about_class_renaming(
     assert (namespace["__result__"] == "Helper") == (allowlist == "[]")
 
 
+@pytest.mark.parametrize(("flag", "jobs"), [("-v", "1"), ("--verbose", "2")])
+def test_cli_verbose_reports_details_without_changing_output(
+    tmp_path: Path, flag: str, jobs: str
+) -> None:
+    source: Path = tmp_path / "source"
+    source.mkdir()
+    (source / "main.py").write_text("from worker import value\nprint(value)\n", encoding="utf-8")
+    (source / "worker.py").write_text("value = 42\n", encoding="utf-8")
+    normal: Path = tmp_path / "normal"
+    verbose: Path = tmp_path / "verbose"
+    common: list[str] = [str(source), "--allowlist", "[]", "--jobs", jobs]
+    baseline = subprocess.run(
+        [*CLI, *common, str(normal)], check=True, capture_output=True, text=True
+    )
+    result = subprocess.run(
+        [*CLI, *common, str(verbose), flag], check=True, capture_output=True, text=True
+    )
+    assert (normal / "app.min.py").read_bytes() == (verbose / "app.min.py").read_bytes()
+    assert baseline.stdout == result.stdout
+    assert "Parsed module" not in baseline.stderr
+    assert "Prepared module" not in baseline.stderr
+    for message in (
+        f"Using {jobs} worker",
+        "Parsed module 1/2: main.py",
+        "Parsed module 2/2: worker.py",
+        "Prepared module 1/2: main.py",
+        "Prepared module 2/2: worker.py",
+        "Folding mixin hierarchies",
+        "Running Python minifier",
+        "Compiling generated Python for validation",
+        "Writing app.min.py",
+    ):
+        assert message in result.stderr
+    assert result.stderr.splitlines()[-1].startswith("Completed in ")
+
+
 def test_cli_reports_parameter_rename_counts(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

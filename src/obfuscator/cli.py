@@ -26,6 +26,9 @@ def main() -> None:
     )
     parser.add_argument("--report", action="store_true", help="Show allowlisted identifier renames")
     parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print detailed progress to stderr"
+    )
+    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -73,16 +76,25 @@ def main() -> None:
     def report_progress(stage: str) -> None:
         print(f"[{monotonic() - started:.1f}s] {stage}...", file=sys.stderr, flush=True)
 
+    def report_detail(message: str) -> None:
+        print(f"[{monotonic() - started:.1f}s]   {message}", file=sys.stderr, flush=True)
+
+    if args.verbose:
+        report_detail(f"Read {count} modules from {source}")
+        report_detail(f"Output: {output / 'app.min.py'}")
     try:
         result = obfuscate_modules(
             originals,
             read_allowlist(args.allowlist),
             jobs=args.jobs,
             progress=report_progress,
+            verbose=report_detail if args.verbose else None,
             debug=args.debug,
         )
     except ValueError as error:
         parser.error(str(error))
+    if args.verbose:
+        report_detail("Writing app.min.py")
     output.mkdir(parents=True, exist_ok=args.force)
     (output / "app.min.py").write_text(result.source, encoding="utf-8")
     before = sum(len(original.encode("utf-8")) for original in originals.values())
