@@ -23,8 +23,8 @@ dependencies = [
     "redis==8.1.0"
 ]
 
-[project.optional-dependencies]
-# pip install -e ".[dev]"
+[dependency-groups]
+# uv sync --locked
 dev = [
     "python-minifier==3.4.0",
     "sqlglot==30.34.0",
@@ -38,6 +38,13 @@ dev = [
     "types-qrcode==8.2.0.20260518",
     "types-requests==2.33.0.20261030",
     "types-Pillow==10.2.0.20240822",
+]
+release = [
+    "nuitka>=4,<5",
+    "ordered-set",
+    "zstandard",
+    "python-minifier==3.4.0",
+    "sqlglot==30.34.0",
 ]
 
 [build-system]

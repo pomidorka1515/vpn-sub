@@ -2,7 +2,7 @@
   
 ## Dependencies and retirement  
   
-`requirements.txt` and `pyproject.toml` declare the same runtime requirements. Quart and Hypercorn are the active direct framework/server dependencies; aiohttp, aiosqlite, redis.asyncio and pyTelegramBotAPI >=4.37,<5 provide runtime I/O. Requests remains for CLI downloads. pytest-asyncio is development-only.  
+`pyproject.toml` declares runtime dependencies and development/release dependency groups; `uv.lock` locks the complete dependency graph. Use uv with `--locked` for setup and execution. Quart and Hypercorn are the active direct framework/server dependencies; aiohttp, aiosqlite, redis.asyncio and pyTelegramBotAPI provide runtime I/O. Requests remains for CLI downloads. pytest-asyncio is development-only.
   
 The explicit Flask, Gunicorn and types-gunicorn requirements have been removed during step 12 cleanup, along with the superseded server/repository/panel/core implementations and temporary environment aliases. Quart retains its upstream Flask dependency. Configure serving with `APP_BIND` and `LOGLEVEL_HTTP`.  
   
@@ -27,11 +27,12 @@ The harness never reads production state or contacts production panel/Telegram/D
 ## Checkout verification  
   
 ```bash
-venv/bin/python scripts/smoke_async_release.py --checkout
-PYTHONPATH=src venv/bin/python -m main --probe
+export UV_PROJECT_ENVIRONMENT=venv
+uv run --locked python scripts/smoke_async_release.py --checkout
+PYTHONPATH=src uv run --locked python -m main --probe
 ```
   
-The checkout smoke runs the same real composition/server/shutdown path. CI installs redis-server for this test. Deployment uses one process/event loop, `APP_BIND`, `LOGLEVEL_HTTP`, and the README systemd example with `TimeoutStopSec=90`, `KillMode=mixed` and SIGTERM. Do not enable reload or multiple workers. The shared checkout command is `PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app`.  
+The checkout smoke runs the same real composition/server/shutdown path. CI installs redis-server for this test. Deployment uses one process/event loop, `APP_BIND`, `LOGLEVEL_HTTP`, and the README systemd example with `TimeoutStopSec=90`, `KillMode=mixed` and SIGTERM. Do not enable reload or multiple workers. The shared checkout command is `PYTHONPATH=src uv run --locked hypercorn --config python:serve asgi:app`.
   
 ## Verification status  
   

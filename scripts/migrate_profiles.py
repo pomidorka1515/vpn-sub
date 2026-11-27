@@ -12,8 +12,11 @@ not migrate ``config.json``.
 
 Usage::
 
-    venv/bin/python scripts/migrate_profiles.py            # dry-run (default)
-    venv/bin/python scripts/migrate_profiles.py --apply    # rewrite config.json
+    uv run --no-project --python 3.14 --with 'fastjsonschema>=2.21,<3' python scripts/migrate_profiles.py
+    uv run --no-project --python 3.14 --with 'fastjsonschema>=2.21,<3' python scripts/migrate_profiles.py --apply
+
+The first command is a dry-run; the second rewrites config.json. No project
+manifest, lockfile, or preinstalled script dependency is required.
 """
 
 from __future__ import annotations

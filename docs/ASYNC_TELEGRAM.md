@@ -36,4 +36,4 @@ History/business reads and Telegram sends are awaited; bandwidth charts, leaderb
   
 ## Verification  
   
-Existing bot suites were converted to async with service-aware mocks, preserving menu/routing/validation/rendering coverage. Additional tests exercise concurrent messages, independent users, expiry, menu cancellation, per-transition admin revocation, callback-state isolation, cancelled polling waiters, draining, error redaction and optional production bot wiring. Required checks: `venv/bin/ruff check .`, `venv/bin/mypy`, `venv/bin/pyright`, `venv/bin/pytest`.  
+Existing bot suites were converted to async with service-aware mocks, preserving menu/routing/validation/rendering coverage. Additional tests exercise concurrent messages, independent users, expiry, menu cancellation, per-transition admin revocation, callback-state isolation, cancelled polling waiters, draining, error redaction and optional production bot wiring. Required checks: `uv run --locked ruff check .`, `uv run --locked mypy`, `uv run --locked pyright`, `uv run --locked pytest`.

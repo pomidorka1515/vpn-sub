@@ -46,6 +46,7 @@ jobs:
     env:
       RELEASE_LIBC: ${{ matrix.libc }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      UV_PROJECT_ENVIRONMENT: venv
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -78,7 +79,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-          cache: pip
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.10"
+          enable-cache: true
 
       - name: prepare native musl builder
         if: matrix.libc == 'musl'
@@ -144,19 +149,16 @@ jobs:
 
       - name: install runtime dependencies
         run: |
-          python -m pip install -U pip
-          python -m pip install 'nuitka>=4,<5' ordered-set zstandard
-          python -m pip install 'python-minifier==3.4.0' 'sqlglot==30.34.0'
-          python -m pip install -r requirements.txt
+          uv sync --locked --python "$(command -v python)" --no-dev --group release --no-install-project
 
       - name: build PNG-only Pillow
         run: |
           # Import exclusions cannot remove codecs linked into the Pillow wheel.
           # Rebuild the installed version, preserving PNG and font/text layout.
-          # Avoid pip's cached full-featured wheel, including across tag builds.
+          # Avoid uv's cached full-featured wheel, including across tag builds.
           pillow_version="$(python -c 'import PIL; print(PIL.__version__)')"
-          CFLAGS="-O2 -g0" python -m pip install --force-reinstall --no-deps \
-            --no-cache-dir --no-binary=pillow "Pillow==${pillow_version}" \
+          CFLAGS="-O2 -g0" uv pip install --python "$(command -v python)" --reinstall --no-deps \
+            --no-cache --no-binary=pillow "Pillow==${pillow_version}" \
             -C zlib=enable -C freetype=enable -C raqm=enable \
             -C jpeg=disable -C tiff=disable -C jpeg2000=disable \
             -C webp=disable -C avif=disable -C lcms=disable \
@@ -744,9 +746,12 @@ jobs:
               --workdir /smoke vpn-sub-musl-builder bash -euo pipefail -c '
                 ln -s /usr/bin/redis-server /smoke/bin/redis-server
                 export PATH=/smoke/bin
-                exec /usr/local/bin/python /smoke/scripts/smoke_async_release.py --binary /smoke/vpn-sub --report /smoke/vpn-sub-report.xml
+                exec /opt/runtime/venv/bin/python /smoke/scripts/smoke_async_release.py --binary /smoke/vpn-sub --report /smoke/vpn-sub-report.xml
               '
           else
+            # Use setup-python's base interpreter: the checkout is hidden below.
+            uv venv --python "$pythonLocation/bin/python" "$isolated/venv"
+            UV_PROJECT_ENVIRONMENT="$isolated/venv" uv sync --locked --no-dev --no-install-project --python "$pythonLocation/bin/python"
             ln -s "$(command -v redis-server)" "$isolated/bin/redis-server"
             sudo unshare --mount --net bash -c '
             set -euo pipefail
@@ -757,7 +762,7 @@ jobs:
             export PATH="$1/bin"
             unset LD_LIBRARY_PATH
             exec "$3" "$1/scripts/smoke_async_release.py" --binary "$1/vpn-sub" --report "$1/vpn-sub-report.xml"
-            ' -- "$isolated" "$GITHUB_WORKSPACE" "$(command -v python)"
+            ' -- "$isolated" "$GITHUB_WORKSPACE" "$isolated/venv/bin/python"
           fi
 
       - name: verify ELF ABI

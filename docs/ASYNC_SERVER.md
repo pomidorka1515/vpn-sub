@@ -7,8 +7,9 @@
 Both serving paths use `src/serve.py`:  
   
 ```bash
-PYTHONPATH=src venv/bin/python -m main
-PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app
+export UV_PROJECT_ENVIRONMENT=venv
+PYTHONPATH=src uv run --locked python -m main
+PYTHONPATH=src uv run --locked hypercorn --config python:serve asgi:app
 ```
   
 The binary uses `main.serve_application()` with one `asyncio.run()` and Hypercorn's in-process API. The checkout CLI config selects one asyncio worker; do not override its worker count or enable reload in deployment. Hypercorn alone owns SIGINT/SIGTERM, stops listener admission, and drains HTTP requests before invoking Quart shutdown. No competing signal handlers are installed.  

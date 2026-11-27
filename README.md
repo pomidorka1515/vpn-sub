@@ -93,7 +93,7 @@ Designed to run on one small Linux VPS.
 
 ## Setup
 
-Prefer the release binaries. No venv, no checkout, no `requirements.txt`.  
+Prefer the release binaries. No Python environment, checkout, or uv needed.
 `data/` next to the binary holds runtime state. Fill `data/config.json` before
 the first start. Add the optional `discord` section to enable Discord.  
 A compiled binary ignores `$schema` and validates against the packed schema, so
@@ -436,12 +436,13 @@ reloads on file change and will misread the new objects.
 ```bash
 # From the binary installation directory; downloads scripts and the packed schema.
 ./vpn-sub --load-scripts
-# Install Python 3.14 with venv and pip using your distribution's packages first.
-python3.14 -m venv .migration-venv
-.migration-venv/bin/python -m pip install 'fastjsonschema>=2.21,<3'
-.migration-venv/bin/python scripts/migrate_profiles.py            # dry-run
-.migration-venv/bin/python scripts/migrate_profiles.py --apply    # rewrite config.json
+# Install uv first: https://docs.astral.sh/uv/getting-started/installation/
+uv run --no-project --python 3.14 --with 'fastjsonschema>=2.21,<3' python scripts/migrate_profiles.py
+uv run --no-project --python 3.14 --with 'fastjsonschema>=2.21,<3' python scripts/migrate_profiles.py --apply
 ```
+
+The first command is a dry-run; the second rewrites `config.json`. uv supplies
+Python and the script dependency without requiring a checkout or lockfile.
 
 The original is preserved as `config.json.pre-v6` beside the file. A second
 `--apply` leaves that backup alone. The replacement preserves the original file's
@@ -500,7 +501,7 @@ verifies its release SHA-256/size, and replaces **`vpn-sub`** (keeping
 than guessing. The command asks before it downloads.
 If the service is running, it asks you to stop it and continues only after
 it is gone. It does not stop or start it. This also works without systemd,
-including proot/Supervisor. A checkout (`python -m main`)
+including proot/Supervisor. A checkout (`uv run --locked python -m main`)
 refuses. At boot a compiled binary logs an update notice when a newer release exists. It
 does not download anything and it does not prompt. Set `VPN_SUB_DISABLE_UPDATE_NOTICE=1`
 in the service environment to disable this startup network check; explicit

@@ -2,6 +2,9 @@
 # The official normal-GIL interpreter has shared libpython, not its static .a.
 FROM python:3.14.10-alpine3.23
 
+COPY --from=ghcr.io/astral-sh/uv:0.13.10 /uv /usr/local/bin/uv
+ENV UV_PROJECT_ENVIRONMENT=venv
+
 RUN apk add --no-cache \
     bash binutils build-base ccache coreutils curl findutils freetype-dev \
     libffi-dev linux-headers openssl openssl-dev perl pkgconf \
@@ -25,5 +28,6 @@ RUN curl -fL --retry 3 \
 
 # A fresh copy of this image also runs the isolated lifecycle smoke harness.
 # No checkout, Node, or build-time private libraries are mounted into it.
-COPY requirements.txt /opt/release-requirements.txt
-RUN python -m pip install --no-cache-dir -r /opt/release-requirements.txt
+COPY pyproject.toml uv.lock /opt/runtime/
+RUN cd /opt/runtime \
+    && uv sync --locked --python /usr/local/bin/python --no-dev --no-install-project --no-cache

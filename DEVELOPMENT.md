@@ -35,20 +35,37 @@ A git checkout is for development. Build the frontend as described below before
 running the service or tests. Start Redis first, then:
 
 ```bash
-# Python 3.14 for development
-python3.14 -m venv venv
-venv/bin/pip install -r requirements.txt && venv/bin/pip install -e ".[dev]"
+# Install uv first: https://docs.astral.sh/uv/getting-started/installation/
+uv python install 3.14
+export UV_PROJECT_ENVIRONMENT=venv
+uv sync --locked
 ```
+
+Use uv for all Python dependency management. Set `UV_PROJECT_ENVIRONMENT=venv`
+in each checkout shell so uv uses the project's existing `venv/` directory.
+`uv sync --locked` installs the runtime and development groups; `uv run --locked`
+runs commands in that environment and rejects stale dependency metadata.
+`pyproject.toml` is the only dependency manifest; commit `uv.lock` with it.
+The native TOML lockfile includes transitive versions and artifact hashes and
+must retain uv's supported multiline format.
+
+For intentional dependency changes, edit the pins in `pyproject.toml`, run
+`uv lock`, review the version changes, then run `uv sync --locked`. Do not
+regenerate the lock during CI or release installation. Release builds use
+`uv sync --locked --no-dev --group release --no-install-project`; their custom
+Pillow rebuild uses `uv pip` with the already locked Pillow version. Keep release
+commands in the synced environment so an automatic sync does not replace that
+custom build with the standard wheel. CI and container builds pin uv to 0.13.10.
 
 After the frontend build has finished:
 
 ```bash
-venv/bin/ruff check .
-venv/bin/pytest
-venv/bin/mypy && venv/bin/pyright
-PYTHONPATH=src venv/bin/python -m main  # same entrypoint as the main binary
+uv run --locked ruff check .
+uv run --locked pytest
+uv run --locked mypy && uv run --locked pyright
+PYTHONPATH=src uv run --locked python -m main  # same entrypoint as the main binary
 # Alternative checkout server (keep one worker):
-PYTHONPATH=src venv/bin/hypercorn --config python:serve asgi:app
+PYTHONPATH=src uv run --locked hypercorn --config python:serve asgi:app
 ```
 
 **Do not run backend tests, frontend tests, or release smoke tests while the
@@ -57,9 +74,9 @@ starting tests. Stop `watch` before running tests so another rebuild cannot
 overlap them. Keep build and test commands sequential, not parallel.
 
 Ruff targets Python 3.14 and checks code style, modernization, common bugs, and
-banned legacy typing imports. Run `venv/bin/ruff check . --fix` to apply safe
+banned legacy typing imports. Run `uv run --locked ruff check . --fix` to apply safe
 automatic fixes, then review the diff. CI runs `ruff check .` alongside pytest,
-mypy, and pyright, plus `venv/bin/python scripts/smoke_async_release.py --checkout`
+mypy, and pyright, plus `uv run --locked python scripts/smoke_async_release.py --checkout`
 with `redis-server` installed.
 
 **Pass `--no-native-parser` to mypy when on Termux/Android** *(or LD_PRELOAD libpython)*
@@ -70,10 +87,10 @@ Tests in `src/tests/` are Python packages grouped by subsystem (`api/`, `core/`,
 `bwatch/`, `config/`, `db/`, bots, and runtime). Run a subsystem or a single test:
 
 ```bash
-venv/bin/pytest src/tests/core
-venv/bin/pytest src/tests/core/test_credentials.py::test_valid_legacy_hash_is_migrated_to_argon2
-venv/bin/pytest -m redis
-venv/bin/pytest -m "not integration"
+uv run --locked pytest src/tests/core
+uv run --locked pytest src/tests/core/test_credentials.py::test_valid_legacy_hash_is_migrated_to_argon2
+uv run --locked pytest -m redis
+uv run --locked pytest -m "not integration"
 ```
 
 Keep reusable factories and fakes in `tests.support`, with explicit imports such
@@ -164,7 +181,7 @@ SQLite, Redis, panel clients, `Subscription` recovery, watcher baseline/snapshot
 - `src/app.py`: `create_application()` factory. Builds the `Application`
   runtime (paths, config snapshots, async DB, Redis, panels, subscription and Quart app)
 - `src/asgi.py`: ASGI entrypoint (`asgi:app`); lifespan hooks start and stop the runtime
-- `src/main.py`: process entry for a checkout (`python -m main`) and for the
+- `src/main.py`: process entry for a checkout (`uv run --locked python -m main`) and for the
   Nuitka binary. Runs Hypercorn in-process on one event loop
 - `src/serve.py`: shared Hypercorn settings for checkout and binary serving
 - `src/core/`: `Subscription` and the user, code, panel, bandwidth, and audit
@@ -239,8 +256,8 @@ Supported decorators are applied when the concrete class is defined. Overridden
 implementations needed by `super()` become hidden concrete methods; unused
 overridden methods are omitted (their default expressions are still evaluated).
 Mixin classes are never reconstructed at runtime.
-Run `venv/bin/pytest src/tests/obfuscator/test_mixins.py`
-and the full obfuscator regression suite (`venv/bin/pytest src/tests/obfuscator`)
+Run `uv run --locked pytest src/tests/obfuscator/test_mixins.py`
+and the full obfuscator regression suite (`uv run --locked pytest src/tests/obfuscator`)
 when changing this contract.
 
 ### Code quality
@@ -313,7 +330,7 @@ bounds a stuck stop.
 
 ### Flattened Python releases
 
-`PYTHONPATH=src python -m obfuscator src build/release-src` writes only
+`PYTHONPATH=src uv run --locked python -m obfuscator src build/release-src` writes only
 `build/release-src/app.min.py` (requires `python-minifier==3.4.0`). The release
 workflow compiles that file with Nuitka. Use `-f` / `--force` to overwrite
 `app.min.py` in an existing output directory; unrelated files are left intact.
@@ -331,7 +348,7 @@ The build-only `src/obfuscator/` package and `src/tests/` are always excluded
 from the flattened output. The package exposes `main()` and `obfuscate()`;
 its CLI, pipeline, cleanup, linker, analysis, and renamers live in separate modules.
 Validate generated Python before Nuitka compilation with
-`venv/bin/python scripts/smoke_async_release.py --source build/app.min.py`.
+`uv run --locked python scripts/smoke_async_release.py --source build/app.min.py`.
 This uses disposable loopback dependencies and verifies serving, bundled frontend
 resources, SQLite, shutdown, and restart without using deployment state.
 The CLI reports build stages and elapsed time on stderr as the build runs, ending

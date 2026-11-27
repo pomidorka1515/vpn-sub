@@ -1,5 +1,6 @@
 data/
 *.lock
+!uv.lock
 .*
 .*/
 !.github/
