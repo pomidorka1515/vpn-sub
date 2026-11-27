@@ -603,7 +603,9 @@ each analysis pass and invalidated before the parameter pass after method rename
 Dead-code analysis shares receiver classifications and escape checks across new
 methods of the same inherited class, while checking inherited conflicts separately
 for each method. Its external annotation lookups do not construct the attribute-flow
-graph. Python-minifier still shortens eligible globals, import aliases
+graph. Attribute allowlisting indexes executable expressions once for family checks,
+deduplicates flow dependencies, and reads cached external syntax without copying its
+analysis metadata. Python-minifier still shortens eligible globals, import aliases
 and locals afterward. After packing
 and the tracked rename passes, a pre-minifier pass evaluates short module-level
 string, integer, and float constants, substitutes their literal values at lexical

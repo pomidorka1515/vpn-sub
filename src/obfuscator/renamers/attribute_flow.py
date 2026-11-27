@@ -69,15 +69,15 @@ class _TrackedMap[K, V](UserDict[K, V]):
 
     def __getitem__(self, key: K) -> V:
         self.on_read(self.category, key)
-        return super().__getitem__(key)
+        return self.data[key]
 
     def __setitem__(self, key: K, value: V) -> None:
-        super().__setitem__(key, value)
+        self.data[key] = value
         self.on_write(self.category, key)
 
     def __contains__(self, key: object) -> bool:
         self.on_read(self.category, key)
-        return super().__contains__(key)
+        return key in self.data
 
     @overload
     def get(self, key: K, default: None = None) -> V | None: ...
@@ -90,7 +90,7 @@ class _TrackedMap[K, V](UserDict[K, V]):
 
     def get[T](self, key: K, default: T | None = None) -> V | T | None:
         self.on_read(self.category, key)
-        return super().get(key, default)
+        return self.data.get(key, default)
 
     def keys(self) -> KeysView[K]:
         self.on_read(self.category, _ALL_KEYS)
@@ -257,9 +257,10 @@ class AttributeFlow:
         if self._active_node is None:
             return
         dependency = category, key
-        self._current_dependencies.add(dependency)
-        self._node_dependencies.setdefault(self._active_node, set()).add(dependency)
-        self._dependents.setdefault(dependency, set()).add(self._active_node)
+        if dependency not in self._current_dependencies:
+            self._current_dependencies.add(dependency)
+            self._node_dependencies.setdefault(self._active_node, set()).add(dependency)
+            self._dependents.setdefault(dependency, set()).add(self._active_node)
         for dependencies in self._value_stack:
             dependencies.add(dependency)
 

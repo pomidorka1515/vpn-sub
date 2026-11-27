@@ -192,9 +192,12 @@ def plan_attributes(
     }
     common: list[tuple[int, ast.AST]] = []
     named: dict[str, list[tuple[int, ast.AST]]] = {}
+    expressions: list[ast.expr] = []
     for index, node in enumerate(nodes):
         if id(node) in analysis.annotation_nodes:
             continue
+        if isinstance(node, ast.expr):
+            expressions.append(node)
         if isinstance(node, ast.Attribute):
             if node.attr in reflective:
                 common.append((index, node))
@@ -257,7 +260,7 @@ def plan_attributes(
         verify_family = owner not in verified_families
         if verify_family:
             flow.prepare_contexts(family)
-        candidates = nodes if verify_family else (
+        candidates = expressions if verify_family else (
             node for _, node in merge(common, named.get(name, ()), key=itemgetter(0))
         )
         for node in candidates:

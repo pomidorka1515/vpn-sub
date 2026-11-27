@@ -9,9 +9,43 @@ import pytest
 
 from obfuscator.pipeline import obfuscate_modules
 from obfuscator.renamers.allowlist import AllowlistRenamer
+from obfuscator.renamers.external import _external_tree
+from obfuscator.renamers.external_usage import ExternalUsage
 from tests.support.obfuscator import allowlisted
 
 __all__: list[str] = []
+
+
+class _ExternalItem:
+    allowed: str
+    extra: str
+
+
+class _ExternalBase:
+    def __init__(self, item: _ExternalItem) -> None:
+        self.item = item
+
+    def read(self) -> object:
+        return self.item.allowed
+
+
+class _ExternalChild(_ExternalBase):
+    def other(self) -> object:
+        return self.item.extra
+
+
+def test_external_usage_keeps_cached_trees_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Uncopyable:
+        def __deepcopy__(self, memo: dict[int, object]) -> object:
+            raise AssertionError("analysis metadata must not be copied")
+
+    tree = _external_tree(_ExternalChild)
+    root = tree.body[0]
+    assert isinstance(root, ast.ClassDef)
+    original_body = root.body.copy()
+    monkeypatch.setitem(root.__dict__, "analysis_metadata", Uncopyable())
+    assert ExternalUsage().fields(_ExternalChild, "item") == frozenset({"allowed", "extra"})
+    assert root.body == original_body
 
 
 def test_imported_global_type_only_proxy_is_not_dereferenced(

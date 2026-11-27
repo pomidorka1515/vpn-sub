@@ -8,7 +8,7 @@ import pytest
 
 from obfuscator.analysis import annotation_nodes, inspects_frames
 from obfuscator.annotations import TypeHint, merge_hints
-from obfuscator.renamers.attribute_flow import Value
+from obfuscator.renamers.attribute_flow import Value, _TrackedMap
 from obfuscator.renamers.base import ArgumentRenamer
 from obfuscator.renamers.methods import PrivateMethodRenamer
 
@@ -156,3 +156,19 @@ def test_receiver_joins_reuse_unchanged_values_without_losing_alternatives() -> 
     assert known.merge(wider) is wider
     assert known.merge(Value(frozenset({first}))) is known
     assert known.merge(Value(unknown=True)) == Value(frozenset({first}), unknown=True)
+
+
+def test_tracked_map_reports_present_and_missing_reads() -> None:
+    reads: list[tuple[str, object]] = []
+    writes: list[tuple[str, object]] = []
+    tracked = _TrackedMap[str, int](
+        "fields", lambda category, key: reads.append((category, key)),
+        lambda category, key: writes.append((category, key)),
+    )
+    tracked["present"] = 3
+    assert tracked.get("present") == 3
+    assert tracked.get("missing", 7) == 7
+    assert "missing" not in tracked
+    assert tracked["present"] == 3
+    assert reads == [("fields", key) for key in ("present", "missing", "missing", "present")]
+    assert writes == [("fields", "present")]

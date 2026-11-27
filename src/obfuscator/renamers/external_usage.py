@@ -39,8 +39,13 @@ class ExternalUsage:
 
     def summarize(self, consumer: type | FunctionType, parameter: str,
                   active: frozenset[tuple[type | FunctionType, str]]) -> frozenset[str] | None:
-        tree = copy.deepcopy(_external_tree(consumer))
-        root = tree.body[0]
+        root = _external_tree(consumer).body[0]
+        # Only the class body is extended below.  A deep copy can follow
+        # analysis metadata attached to cached nodes into an entire module;
+        # the syntax nodes themselves are only read by this analysis.
+        if isinstance(root, ast.ClassDef):
+            root = copy.copy(root)
+            root.body = root.body.copy()
         if isinstance(root, ast.ClassDef) and root.decorator_list:
             return None
         if isinstance(consumer, type) and isinstance(root, ast.ClassDef):
@@ -55,11 +60,11 @@ class ExternalUsage:
                     if name in {"__class_getitem__", "__init_subclass__", "__subclasshook__"}:
                         continue
                     if isinstance(member, FunctionType):
-                        root.body.extend(copy.deepcopy(_external_tree(member)).body)
+                        root.body.extend(_external_tree(member).body)
                     elif isinstance(member, property):
                         for accessor in (member.fget, member.fset, member.fdel):
                             if accessor is not None:
-                                root.body.extend(copy.deepcopy(_external_tree(accessor)).body)
+                                root.body.extend(_external_tree(accessor).body)
                     elif inspect.isroutine(member):
                         return None
         nodes = list(ast.walk(root))
