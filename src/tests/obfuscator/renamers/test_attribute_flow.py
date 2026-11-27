@@ -8,9 +8,10 @@ import pytest
 
 from obfuscator.pipeline import obfuscate_modules
 from obfuscator.renamers.allowlist import AllowlistRenamer
+from obfuscator.renamers.attribute_flow import AttributeFlow
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 __all__: list[str] = []
 
@@ -27,6 +28,57 @@ def execute(source: str) -> dict[str, Any]:
     namespace: dict[str, Any] = {}
     exec(ast.unparse(tree), namespace)  # ruff: ignore[exec-builtin] - Fixed fixture.
     return namespace
+
+
+@pytest.mark.parametrize("guard", ["", "if not isinstance(other, Record): raise TypeError()\n"])
+def test_guard_analysis_does_not_walk_statements_for_unguarded_bindings(
+    monkeypatch: pytest.MonkeyPatch, guard: str,
+) -> None:
+    source = "class Record: pass\ndef invoke(value, other):\n"
+    source += "".join(f"    {line}\n" for line in guard.splitlines())
+    source += "".join(f"    unrelated_{index} = external()\n" for index in range(100))
+    source += "    return value\n"
+    analysis = AllowlistRenamer(ast.parse(source))
+    flow = analysis.attribute_flow
+    references = [
+        node for node in analysis.nodes
+        if isinstance(node, ast.Name) and node.id == "value" and isinstance(node.ctx, ast.Load)
+    ]
+    flow.guarded.clear()
+    flow.guard_bindings.clear()
+
+    def unexpected_walk(node: ast.AST) -> Iterator[ast.AST]:
+        pytest.fail("An unguarded binding triggered a statement walk")
+
+    monkeypatch.setattr(ast, "walk", unexpected_walk)
+    assert references
+    for reference in references:
+        assert not flow.guarded_receivers(reference)
+
+
+def test_guard_results_survive_flow_value_invalidation(monkeypatch: pytest.MonkeyPatch) -> None:
+    analysis = AllowlistRenamer(ast.parse(
+        "class Record: pass\n"
+        "def invoke():\n"
+        "    value = external()\n"
+        "    if not isinstance(value, Record): raise TypeError()\n"
+        "    return value\n"
+    ))
+    flow = analysis.attribute_flow
+    reference = next(
+        node for node in analysis.nodes
+        if isinstance(node, ast.Name) and isinstance(analysis.parents.get(node), ast.Return)
+    )
+    flow.guarded.clear()
+    flow.values.clear()
+    assert flow.value(reference).owners == frozenset(analysis.classes)
+
+    def unexpected_resolution(self: AttributeFlow, node: ast.Name) -> frozenset[ast.ClassDef]:
+        pytest.fail("Flow value invalidation repeated static guard analysis")
+
+    monkeypatch.setattr(AttributeFlow, "resolve_guarded_receivers", unexpected_resolution)
+    flow.values.clear()
+    assert flow.value(reference).owners == frozenset(analysis.classes)
 
 
 @pytest.mark.parametrize("usage", [

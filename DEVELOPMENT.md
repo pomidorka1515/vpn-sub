@@ -618,9 +618,11 @@ methods of the same inherited class, while checking inherited conflicts separate
 for each method. Its external annotation lookups do not construct the attribute-flow
 graph. Attribute allowlisting indexes executable expressions once for family checks,
 deduplicates flow dependencies, and reads cached external syntax without copying its
-analysis metadata. Python-minifier still shortens eligible globals, import aliases
-and locals afterward. After packing
-and the tracked rename passes, a pre-minifier pass evaluates short module-level
+analysis metadata. Receiver guard analysis indexes candidate bindings once per
+function and caches lexical results across flow-state updates, avoiding repeated
+statement walks for unguarded names. Python-minifier still shortens eligible globals,
+import aliases and locals afterward. After packing and the tracked rename passes,
+a pre-minifier pass evaluates short module-level
 string, integer, and float constants, substitutes their literal values at lexical
 references, and deletes their assignments. The value's text must be strictly
 shorter than 150 characters (string contents, or `str(value)` for numbers).

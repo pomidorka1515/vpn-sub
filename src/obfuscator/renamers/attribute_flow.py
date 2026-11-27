@@ -139,6 +139,8 @@ class AttributeFlow:
         self.local_forwarders: dict[ast.FunctionDef, bool] = {}
         self.argument_bindings: dict[tuple[ast.Call, CallableValue], dict[ast.arg, ast.expr] | None] = {}
         self.reaching: dict[ast.Name, list[ast.AST]] = {}
+        self.guard_bindings: dict[Function, set[Binding]] = {}
+        self.guarded: dict[ast.Name, frozenset[ast.ClassDef]] = {}
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
         self.container_items: MutableMapping[ast.expr, Value] = _TrackedMap(
             "container_items", self._state_read, self._state_changed
@@ -532,11 +534,40 @@ class AttributeFlow:
 
     def guarded_receivers(self, node: ast.Name) -> frozenset[ast.ClassDef]:
         """Follow a straight-line, terminating negative isinstance guard."""
+        if node not in self.guarded:
+            self.guarded[node] = self.resolve_guarded_receivers(node)
+        return self.guarded[node]
+
+    def resolve_guarded_receivers(self, node: ast.Name) -> frozenset[ast.ClassDef]:
         scope = self.enclosing_function(node)
         if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return frozenset()
         binding = self.analysis.bindings.get(node)
-        if binding is None or any(isinstance(ref, (ast.Global, ast.Nonlocal)) for ref in binding.references):
+        if binding is None:
+            return frozenset()
+        # Guard syntax and lexical bindings are stable throughout the flow solve.
+        # Most functions/bindings have no qualifying guard; do not walk their
+        # statements for every unknown name on every fixed-point iteration.
+        guarded: set[Binding] | None = self.guard_bindings.get(scope)
+        if guarded is None:
+            guarded = set()
+            for previous in scope.body:
+                if not (isinstance(previous, ast.If) and not previous.orelse
+                        and len(previous.body) == 1 and isinstance(previous.body[0], ast.Raise)):
+                    continue
+                test = previous.test
+                if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)
+                        and isinstance(test.operand, ast.Call)):
+                    continue
+                call = test.operand
+                builtin = self.analysis.bindings.get(call.func)
+                if (isinstance(cast(object, builtin), BuiltinBinding) and getattr(builtin, "name", "") == "isinstance"
+                        and len(call.args) == 2 and not call.keywords and isinstance(call.args[0], ast.Name)):
+                    guard_binding = self.analysis.bindings.get(call.args[0])
+                    if guard_binding is not None:
+                        guarded.add(guard_binding)
+            self.guard_bindings[scope] = guarded
+        if binding not in guarded or any(isinstance(ref, (ast.Global, ast.Nonlocal)) for ref in binding.references):
             return frozenset()
         statement: ast.AST = node
         while self.analysis.parents.get(statement) is not scope:
@@ -544,7 +575,7 @@ class AttributeFlow:
             if parent is None or isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
                 return frozenset()
             statement = parent
-        if statement not in scope.body:
+        if not isinstance(statement, ast.stmt) or statement not in scope.body:
             return frozenset()
         if any(
             isinstance(part, ast.Name) and isinstance(part.ctx, (ast.Store, ast.Del))

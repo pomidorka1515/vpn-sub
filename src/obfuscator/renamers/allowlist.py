@@ -947,6 +947,8 @@ class AllowlistRenamer(ArgumentRenamer):
                         f"Escaping/reflected constructor with allowlisted parameters: {constructor_names}; {self.attribute_flow.describe(node)}"
                     )
         member_families: dict[str, set[ast.ClassDef]] = {}
+        # Keep both operands as sets so isdisjoint scans the smaller set of
+        # annotation names, rather than every selection on the success path.
         selected_names = {binding.name for binding in selected}
         # Attribute callables resolve through a member of the same spelling.
         # Avoid inferring receivers for unrelated attribute names throughout
@@ -1164,7 +1166,4 @@ class AllowlistRenamer(ArgumentRenamer):
                 node.attr = name
             else:
                 node.value = name
-        return {
-            **{entry: renamed[binding] for binding, (_, entry, _) in selected.items()},
-            **attribute_renames,
-        }
+        return {**entry_names, **attribute_renames}
