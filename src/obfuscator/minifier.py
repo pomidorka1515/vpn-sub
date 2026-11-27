@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 __all__: list[str] = ["minify"]
 
 
-class _PreservedNames(list[str]):  # ruff: ignore[subclass-builtin] - The pinned minifier expects a list.
+class _PreservedNames(list[str]):  # pyright: ignore[reportUnusedClass] # ruff: ignore[subclass-builtin] - Retained for regression tests; the minifier expects a list.
     """Ordered minifier preserve list with constant-time membership checks.
 
     The pinned minifier extends these lists before checking every binding.

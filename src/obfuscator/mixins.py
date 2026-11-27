@@ -76,9 +76,9 @@ def _clone_ast_value(value: object) -> object:
     if isinstance(value, ast.AST):
         return _clone_ast(value)
     if isinstance(value, list):
-        return [_clone_ast_value(item) for item in value]
+        return [_clone_ast_value(item) for item in cast(list[object], value)]
     if isinstance(value, tuple):
-        return tuple(_clone_ast_value(item) for item in value)
+        return tuple(_clone_ast_value(item) for item in cast(tuple[object, ...], value))
     return value
 
 

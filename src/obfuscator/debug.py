@@ -22,13 +22,13 @@ def _clone_ast_value(value: object) -> object:
     if isinstance(value, ast.AST):
         return _clone_ast(value)
     if isinstance(value, list):
-        return [_clone_ast_value(item) for item in value]
+        return [_clone_ast_value(item) for item in cast(list[object], value)]
     if isinstance(value, tuple):
-        return tuple(_clone_ast_value(item) for item in value)
+        return tuple(_clone_ast_value(item) for item in cast(tuple[object, ...], value))
     return value
 
 
-def _clone_ast(node: ast.AST) -> ast.AST:
+def _clone_ast[T: ast.AST](node: T) -> T:
     clone = copy.copy(node)
     clone.__dict__.clear()
     for field in type(node)._fields:

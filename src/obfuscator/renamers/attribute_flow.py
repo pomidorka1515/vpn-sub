@@ -13,7 +13,7 @@ from .external import ExternalReturns
 from .external_usage import ExternalUsage
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, ItemsView, Iterator, KeysView, ValuesView
+    from collections.abc import Callable, ItemsView, Iterator, KeysView, MutableMapping, ValuesView
 
     from ..analysis import Binding, Function
     from .allowlist import AllowlistRenamer
@@ -80,21 +80,17 @@ class _TrackedMap[K, V](UserDict[K, V]):
         return super().__contains__(key)
 
     @overload
-    def get(self, key: K) -> V | None: ...
+    def get(self, key: K, default: None = None) -> V | None: ...
 
     @overload
     def get(self, key: K, default: V) -> V: ...
 
-    def get(self, key: K, default: V | None = None) -> V | None:
+    @overload
+    def get[T](self, key: K, default: T) -> V | T: ...
+
+    def get[T](self, key: K, default: T | None = None) -> V | T | None:
         self.on_read(self.category, key)
         return super().get(key, default)
-
-    def setdefault(self, key: K, default: V) -> V:
-        self.on_read(self.category, key)
-        if key not in self:
-            super().__setitem__(key, default)
-            self.on_write(self.category, key)
-        return super().__getitem__(key)
 
     def keys(self) -> KeysView[K]:
         self.on_read(self.category, _ALL_KEYS)
@@ -129,7 +125,7 @@ class AttributeFlow:
         self._value_stack: list[set[tuple[str, object]]] = []
         self._value_dependencies: dict[ast.AST, set[tuple[str, object]]] = {}
         self.values: dict[ast.AST, Value] = {}
-        self.arguments: _TrackedMap[Binding, Value] = _TrackedMap(
+        self.arguments: MutableMapping[Binding, Value] = _TrackedMap(
             "arguments", self._state_read, self._state_changed
         )
         self.fields: _TrackedMap[tuple[ast.ClassDef, str], Value] = _TrackedMap(
@@ -144,10 +140,10 @@ class AttributeFlow:
         self.argument_bindings: dict[tuple[ast.Call, CallableValue], dict[ast.arg, ast.expr] | None] = {}
         self.reaching: dict[ast.Name, list[ast.AST]] = {}
         self.records: dict[ast.ClassDef, tuple[bool, dict[str, ast.expr | None]]] = {}
-        self.container_items: _TrackedMap[ast.expr, Value] = _TrackedMap(
+        self.container_items: MutableMapping[ast.expr, Value] = _TrackedMap(
             "container_items", self._state_read, self._state_changed
         )
-        self.container_values: _TrackedMap[ast.expr, Value] = _TrackedMap(
+        self.container_values: MutableMapping[ast.expr, Value] = _TrackedMap(
             "container_values", self._state_read, self._state_changed
         )
         self.mapping_views: set[ast.Call] = set()

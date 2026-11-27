@@ -40,7 +40,7 @@ def test_fragment_buffer_trims_across_boundaries() -> None:
 )
 def test_buffered_printer_matches_dependency(source: str, single_line: bool) -> None:
     tree = ast.parse(source)
-    expected = ModulePrinter(prefer_single_line=single_line)(tree)
+    expected = ModulePrinter(prefer_single_line=single_line)(tree)  # type: ignore[no-untyped-call]
     actual = _BufferedModulePrinter(prefer_single_line=single_line)(tree)
     assert actual == expected
 
